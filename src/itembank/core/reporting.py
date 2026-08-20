@@ -232,6 +232,146 @@ def report_rows(session: Session, exam: Exam, *, top_wrong_limit: int = 5) -> li
     return out
 
 
+# ---------------------------------------------------------------------------
+# 問題詳細の材料(設計書 §14-3)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class Appearance:
+    """ある問題が 1 回出題されたときの記録と、そのときの統計。
+
+    版をまたいで並べる。**改訂すると新版は実績ゼロから始まる**(設計書 §2.2)ので、
+    推移を見るときは版の切れ目が分かる必要がある。
+    """
+
+    exam_id: int
+    exam_name: str | None
+    exam_date: str | None
+    position: int
+    qversion_id: int
+    version_no: int
+    correct_asked: str
+    n: int | None
+    p: float | None
+    disc: float | None
+    sel: dict[str, float | None]
+    blank_rate: float | None
+    overselect_rate: float | None
+    flags: list[str]
+    #: マークパターン度数(無回答は ``''``)。統計未取込なら空。
+    counts: dict[str, int]
+
+    @property
+    def year(self) -> int | None:
+        return int(str(self.exam_date)[:4]) if self.exam_date else None
+
+    @property
+    def has_stats(self) -> bool:
+        return self.p is not None
+
+    def top_wrong(self, limit: int = 5) -> list[tuple[str, int]]:
+        """誤答パターン上位(設計書 §14-3)。無回答は含めない。"""
+        return sorted(
+            ((p, c) for p, c in self.counts.items() if p and p != self.correct_asked and c),
+            key=lambda pc: (-pc[1], PATTERNS.index(pc[0])),
+        )[:limit]
+
+    def partial(self) -> dict[int, int]:
+        """部分正答分布(正答を何個当てたか → 人数)。設計書 §14-3。
+
+        ``item_type`` は渡さない。部分正答分布はタイプに依らず度数だけで決まり、
+        ここで導出し直すとタイプの取り違えを持ち込むだけになるため。
+        """
+        if not self.counts:
+            return {}
+        from .stats import derive_item_stats
+
+        return derive_item_stats(self.counts, self.correct_asked, None).partial
+
+
+@dataclass(frozen=True)
+class QuestionHistory:
+    """問題詳細に出す一式(版履歴・派生系譜・出題実績)。"""
+
+    question_id: int
+    status: str
+    versions: list[QuestionVersion]
+    appearances: list[Appearance]
+    #: 派生元の版(無ければ None)。設計書 §2.3。
+    parent: QuestionVersion | None
+    #: この問題から派生した問題。
+    children: list[Question]
+
+    @property
+    def latest(self) -> QuestionVersion | None:
+        return max(self.versions, key=lambda v: v.version_no) if self.versions else None
+
+    def with_stats(self) -> list[Appearance]:
+        return [a for a in self.appearances if a.has_stats]
+
+
+def question_history(session: Session, question_id: int) -> QuestionHistory:
+    """問題詳細画面の材料をまとめて集める(設計書 §14-3)。"""
+    from .bank import derivation_parent, derived_children
+
+    question = session.get(Question, question_id)
+    if question is None:
+        raise ValueError(f"問題 {question_id} がありません")
+
+    versions = sorted(question.versions, key=lambda v: v.version_no)
+    version_no = {v.id: v.version_no for v in versions}
+
+    rows = session.execute(
+        select(ExamItem.exam_id, ExamItem.position, ExamItem.qversion_id, ExamItem.correct_asked)
+        .join(QuestionVersion, QuestionVersion.id == ExamItem.qversion_id)
+        .where(QuestionVersion.question_id == question_id)
+    ).all()
+
+    appearances: list[Appearance] = []
+    for exam_id, position, qversion_id, correct in rows:
+        exam = session.get(Exam, exam_id)
+        stat = session.get(ItemStatRow, (exam_id, qversion_id))
+        counts = {
+            pattern: count
+            for pattern, count in session.execute(
+                select(ItemPatternCount.pattern, ItemPatternCount.count).where(
+                    ItemPatternCount.exam_id == exam_id,
+                    ItemPatternCount.qversion_id == qversion_id,
+                )
+            ).all()
+        }
+        appearances.append(
+            Appearance(
+                exam_id=exam_id,
+                exam_name=exam.name if exam else None,
+                exam_date=exam.exam_date if exam else None,
+                position=position,
+                qversion_id=qversion_id,
+                version_no=version_no.get(qversion_id, 0),
+                correct_asked=correct,
+                n=stat.n if stat else None,
+                p=stat.p if stat else None,
+                disc=stat.disc if stat else None,
+                sel={label: getattr(stat, f"sel_{label}") if stat else None for label in "abcde"},
+                blank_rate=stat.blank_rate if stat else None,
+                overselect_rate=stat.overselect_rate if stat else None,
+                flags=decode_flags(stat.flags) if stat else [],
+                counts=counts,
+            )
+        )
+    appearances.sort(key=lambda a: (a.exam_date or "", a.exam_id))
+
+    return QuestionHistory(
+        question_id=question_id,
+        status=question.status,
+        versions=versions,
+        appearances=appearances,
+        parent=derivation_parent(session, question),
+        children=derived_children(session, question),
+    )
+
+
 def choice_item_appearances(session: Session):
     """選択肢アイテム単位の実績の材料(設計書 §6.5)。
 

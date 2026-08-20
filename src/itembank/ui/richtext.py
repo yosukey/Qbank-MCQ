@@ -128,12 +128,18 @@ class RichTextEdit(QTextEdit):
     """
 
     htmlChanged = Signal(str)
+    #: 書式ツールバーが「いまどの欄に当てるか」を知るために使う。
+    focusReceived = Signal()
 
     def __init__(self, parent: QWidget | None = None) -> None:
         super().__init__(parent)
         self.setAcceptRichText(False)
         self.setTabChangesFocus(True)
         self.textChanged.connect(lambda: self.htmlChanged.emit(self.fragment_html()))
+
+    def focusInEvent(self, event) -> None:  # noqa: N802 - Qt の命名
+        super().focusInEvent(event)
+        self.focusReceived.emit()
 
     # -- 内容 ---------------------------------------------------------------
     def fragment_html(self) -> str:
@@ -176,6 +182,61 @@ class RichTextEdit(QTextEdit):
             event.ignore()
             return
         super().keyPressEvent(event)
+
+
+class FormatToolBar(QWidget):
+    """複数の編集欄に効く書式ボタン(選択肢 5 つで 5 組のボタンを並べないため)。
+
+    ボタンは ``NoFocus`` にしてある。押しても編集欄からフォーカスが移らないので、
+    選択範囲を保ったまま書式を当てられる。
+    """
+
+    def __init__(self, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self._targets: list[RichTextEdit] = []
+        self._current: RichTextEdit | None = None
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        self.buttons: dict[str, QToolButton] = {}
+        for tag, label, shortcut in FORMAT_BUTTONS:
+            button = QToolButton(self)
+            button.setText(label)
+            button.setToolTip(f"<{tag}>  {shortcut}")
+            button.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+            button.clicked.connect(lambda _=False, t=tag: self.apply(t))
+            layout.addWidget(button)
+            self.buttons[tag] = button
+        layout.addStretch(1)
+
+    def attach(self, edit: RichTextEdit) -> None:
+        self._targets.append(edit)
+        edit.focusReceived.connect(lambda e=edit: self._remember(e))
+        if self._current is None:
+            self._current = edit
+
+        for tag, _, shortcut in FORMAT_BUTTONS:
+            action = QAction(edit)
+            action.setShortcut(QKeySequence(shortcut))
+            action.triggered.connect(lambda _=False, t=tag, e=edit: e.toggle_tag(t))
+            edit.addAction(action)
+
+    def _remember(self, edit: RichTextEdit) -> None:
+        self._current = edit
+
+    def current(self) -> RichTextEdit | None:
+        """いま書式を当てる先。フォーカスがある欄、なければ直近に触れた欄。"""
+        from PySide6.QtWidgets import QApplication
+
+        focused = QApplication.focusWidget()
+        if isinstance(focused, RichTextEdit) and focused in self._targets:
+            return focused
+        return self._current
+
+    def apply(self, tag: str) -> None:
+        target = self.current()
+        if target is not None:
+            target.toggle_tag(tag)
 
 
 class RichTextField(QWidget):

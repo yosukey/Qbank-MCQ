@@ -17,6 +17,9 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from .. import __version__
+from .bank_view import BankView
+from .question_detail import QuestionDetail
+from .question_editor import QuestionEditor
 from .settings_view import SettingsView
 from .workspace import Workspace
 
@@ -45,11 +48,54 @@ class MainWindow(QMainWindow):
 
     # -- 組み立て -----------------------------------------------------------
     def _build_tabs(self) -> None:
+        self.bank_view = BankView(self.workspace, self)
+        self.bank_view.createRequested.connect(self.open_editor)
+        self.bank_view.duplicateRequested.connect(self.open_duplicate)
+        self.bank_view.editRequested.connect(lambda qid: self.open_editor(question_id=qid))
+        self.bank_view.detailRequested.connect(self.open_detail)
+
         self.settings_view = SettingsView(self.workspace, self)
         self.settings_view.settingsChanged.connect(self.refresh_all)
         self.settings_view.databaseRestored.connect(self._reopen)
 
+        self.tabs.addTab(self.bank_view, "問題バンク")
         self.tabs.addTab(self.settings_view, "設定")
+
+    # -- 問題の編集と詳細(設計書 §14-2, §14-3)-----------------------------
+    def open_editor(
+        self,
+        question_id: int | None = None,
+        *,
+        choice_set_id: int | None = None,
+        derive_from_question_id: int | None = None,
+    ) -> QuestionEditor:
+        """編集ダイアログを開く。閉じたら一覧を読み直す。"""
+        editor = QuestionEditor(
+            self.workspace,
+            question_id=question_id,
+            choice_set_id=choice_set_id,
+            derive_from_question_id=derive_from_question_id,
+            parent=self,
+        )
+        editor.finished.connect(lambda _: self.refresh_all())
+        editor.show()
+        return editor
+
+    def open_duplicate(self, question_id: int) -> QuestionEditor:
+        """複製作成(設計書 §14-1)。保存すると派生になる(§2.2)。"""
+        return self.open_editor(derive_from_question_id=question_id)
+
+    def open_detail(self, question_id: int) -> QuestionDetail:
+        detail = QuestionDetail(self.workspace, question_id, parent=self)
+        # 設計書 §2.6: 詳細から改訂へ直接進める。
+        detail.reviseRequested.connect(lambda qid: self.open_editor(question_id=qid))
+        detail.show()
+        return detail
+
+    def show_question(self, question_id: int) -> None:
+        """バンクのタブに切り替えてその問題を選ぶ(フラグ一覧からの導線)。"""
+        self.tabs.setCurrentWidget(self.bank_view)
+        self.bank_view.select_question(question_id)
 
     def _build_menu(self) -> None:
         file_menu = self.menuBar().addMenu("ファイル")

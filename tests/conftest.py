@@ -64,6 +64,44 @@ def workspace(qapp, isolated_data_dir: Path) -> Iterator:
         ws.close()
 
 
+SAMPLE_DOCX = TESTDATA / "sample" / "exam_2025.docx"
+SAMPLE_STATS = TESTDATA / "sample" / "item_stats_2025.csv"
+
+
+@pytest.fixture
+def loaded_workspace(qapp, isolated_data_dir: Path) -> Iterator:
+    """サンプルの過去問 1 回分(統計つき)を取り込んだ ``Workspace``。
+
+    画面の多くは「実績のある問題」が無いと何も出ない。CLI の取込経路をそのまま
+    使って作るので、GUI テスト用に別のデータ生成経路を持たずに済む。
+    """
+    if not SAMPLE_DOCX.exists():  # pragma: no cover - サンプル未生成の開発機
+        pytest.skip("testdata/sample/ がありません。python tools/make_sample_data.py で作れます")
+
+    from itembank.__main__ import main
+    from itembank.core import paths
+    from itembank.ui.workspace import Workspace
+
+    code = main(
+        [
+            "--db",
+            str(paths.db_path()),
+            "import-exam",
+            "--docx",
+            str(SAMPLE_DOCX),
+            "--stats",
+            str(SAMPLE_STATS),
+        ]
+    )
+    assert code == 0, "サンプルの取込に失敗しました"
+
+    ws = Workspace.open()
+    try:
+        yield ws
+    finally:
+        ws.close()
+
+
 @pytest.fixture
 def design_q1_counts() -> dict[str, int]:
     """設計書 §10.2 の問1の度数。"""

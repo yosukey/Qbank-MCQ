@@ -106,6 +106,31 @@ def derive_item_type(stem_html: str) -> str | None:
     return derive_item_type_detail(stem_html).item_type
 
 
+#: 指示文言を**素の HTML 断片の上で**見つけるための式。導出用の式(``_RE_XX`` /
+#: ``_RE_NUM``)は NFKC 後の文字列に当てるので、置換位置を求めるのには使えない。
+#: 全角数字・全角空白をそのまま許し、直後の句点も指示文言の一部として飲み込む。
+_RE_INSTRUCTION_RAW = re.compile(
+    r"(?:(?:すべて|全て)(?:を)?選べ|[1-9１-９一二三四五][　\s]*つ(?:を)?選べ)[。.]?"
+)
+
+
+def set_instruction(stem_html: str, item_type: str) -> str:
+    """設問文の指示文言を ``item_type`` のものに差し替える(設計書 §14-2 のドロップダウン)。
+
+    既にある指示文言は置き換え、無ければ末尾に足す。**タイプ列は持たない**
+    (設計書 §8)ので、タイプを変えるとはこの文言を変えることに他ならない。
+    """
+    if item_type not in INSTRUCTION_CHOICES:
+        raise ValueError(f"知らないタイプです: {item_type}")
+    wanted = INSTRUCTION_CHOICES[item_type]
+
+    matches = list(_RE_INSTRUCTION_RAW.finditer(stem_html))
+    if matches:
+        last = matches[-1]
+        return stem_html[: last.start()] + wanted + stem_html[last.end() :]
+    return stem_html + wanted
+
+
 def normalize_correct(correct: str) -> str:
     """正答を印字記号の昇順・重複なしの文字列にそろえる(``'da'`` → ``'ad'``)。"""
     plain = unicodedata.normalize("NFKC", correct).strip().lower()

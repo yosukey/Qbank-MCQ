@@ -275,9 +275,7 @@ def create_question_from_printed(
 
     ``(保存結果, セットを新規作成したか)`` を返す。
     """
-    normalized = [normalize_choice(c) for c in printed_choices]
-    choice_set, created = upsert_choice_set(session, normalized)
-    order = cs.resolve_choice_order(choice_set.items_by_no(), normalized)
+    choice_set, order, created = resolve_printed(session, printed_choices)
     result = create_question(
         session,
         stem_html=stem_html,
@@ -290,6 +288,104 @@ def create_question_from_printed(
         image_path=image_path,
     )
     return result, created
+
+
+def resolve_printed(session: Session, printed_choices: list[str]) -> tuple[ChoiceSet, str, bool]:
+    """印字順の選択肢を ``(セット, choice_order, セットを新規作成したか)`` に解く。
+
+    セットは順序を持たない集合なので(設計書 §6.1)、並び替えただけの選択肢は
+    同じセットに解決され、違いは ``choice_order`` にだけ現れる。**画面もこの経路を
+    通す**。通さないと、並び替えのたびに新しいセットが増える。
+    """
+    normalized = [normalize_choice(c) for c in printed_choices]
+    choice_set, created = upsert_choice_set(session, normalized)
+    order = cs.resolve_choice_order(choice_set.items_by_no(), normalized)
+    return choice_set, order, created
+
+
+def revise_question_from_printed(
+    session: Session,
+    question: Question,
+    *,
+    stem_html: str,
+    printed_choices: list[str],
+    correct: str,
+    image_path: str | None = None,
+    allow_inplace: bool = True,
+) -> tuple[SaveResult, bool]:
+    """印字順の選択肢で改訂する(``revise_question`` の印字順版)。"""
+    choice_set, order, created = resolve_printed(session, printed_choices)
+    result = revise_question(
+        session,
+        question,
+        stem_html=stem_html,
+        choice_set=choice_set,
+        choice_order=order,
+        correct=correct,
+        image_path=image_path,
+        allow_inplace=allow_inplace,
+    )
+    return result, created
+
+
+def derive_question_from_printed(
+    session: Session,
+    source: QuestionVersion,
+    *,
+    stem_html: str,
+    printed_choices: list[str],
+    correct: str,
+    status: str = Q_ACTIVE,
+    note: str | None = None,
+    image_path: str | None = None,
+    inherit_tags: bool = True,
+) -> tuple[SaveResult, bool]:
+    """印字順の選択肢で派生を作る(``derive_question`` の印字順版)。"""
+    choice_set, order, created = resolve_printed(session, printed_choices)
+    result = derive_question(
+        session,
+        source,
+        stem_html=stem_html,
+        choice_set=choice_set,
+        choice_order=order,
+        correct=correct,
+        status=status,
+        note=note,
+        image_path=image_path,
+        inherit_tags=inherit_tags,
+    )
+    return result, created
+
+
+def latest_versions_using_set(session: Session, choice_set_id: int) -> list[QuestionVersion]:
+    """このセットを使っている問題の**最新版**(設計書 §2.4 の「セット内の既存設問」)。
+
+    旧版も混ぜると「同じ問い方が既にある」の判断を誤る。
+    """
+    rows = session.scalars(
+        select(QuestionVersion).where(QuestionVersion.choice_set_id == choice_set_id)
+    ).all()
+    latest: dict[int, QuestionVersion] = {}
+    for version in rows:
+        current = latest.get(version.question_id)
+        if current is None or version.version_no > current.version_no:
+            latest[version.question_id] = version
+    return [latest[qid] for qid in sorted(latest)]
+
+
+def unused_correct_item_nos(session: Session, choice_set: ChoiceSet) -> list[int]:
+    """まだ正答として使われていない項目番号(設計書 §2.4)。
+
+        セット内の各項目について「まだ正答として使われていない項目」を提示すると、
+        未着手の問い方が一目で分かる
+
+    正答は印字記号で保存されているので、版ごとの ``choice_order`` を通して
+    項目番号に戻してから数える。
+    """
+    used: set[int] = set()
+    for version in latest_versions_using_set(session, choice_set.id):
+        used.update(cs.correct_to_item_nos(version.correct, version.choice_order))
+    return [item.item_no for item in choice_set.items if item.item_no not in used]
 
 
 def find_duplicate_question(
