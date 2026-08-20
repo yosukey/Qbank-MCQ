@@ -141,16 +141,48 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 それらのファイルはまだ無いので、同じ様式で組んだサンプルを
 `tools/make_sample_data.py` が生成している。実ファイルが手に入ったら:
 
-1. `testdata/` に `exam_2025.docx` と `item_stats_2025.csv` を置く
-2. `itembank inspect-docx testdata/exam_2025.docx` で**想定外の書式がどれだけあるか目で見る**
-   (実装計画 §2.1 が最大のリスクとした点)
-3. `itembank import-exam --docx ... --stats ... --dry-run --json` で 50 問すべてが抽出され、
-   相互検証の不整合が 0 件であることを確認する
-4. 抽出結果を `testdata/exam_2025.golden.json` として固定すると、
-   `test_real_docx_matches_golden` が自動的に回帰対象にする
+**置き場所は `testdata/` 直下**(`testdata/sample/` はサンプル専用なので混ぜない)。
+
+```
+testdata/
+├─ exam_2025.docx          ← 問題 docx
+├─ item_stats_2025.csv     ← 採点後の集計 CSV(設計書 §10.2)
+├─ exam_2025.golden.json   ← 手順 4 で生成する
+├─ legacy/                 ← 旧版スキーマの DB ファイル(実装計画 §7)
+└─ sample/                 ← 自動生成のサンプル。手を入れない
+```
+
+`test_real_docx_matches_golden` は `testdata/*.docx` を直下だけ見るので、
+サブディレクトリに置くと回帰対象にならない。
+
+```bash
+# 1. 想定外の書式がどれだけあるか目で見る(実装計画 §2.1 が最大のリスクとした点)
+itembank inspect-docx testdata/exam_2025.docx
+
+# 2. 登録せずに抽出と相互検証だけ回す。50 問すべてが取れて不整合 0 件になるまで直す
+itembank import-exam --docx testdata/exam_2025.docx \
+                     --stats testdata/item_stats_2025.csv \
+                     --dry-run --json /tmp/dry.json
+
+# 3. 問題なければ本登録
+itembank import-exam --docx testdata/exam_2025.docx --stats testdata/item_stats_2025.csv
+
+# 4. 抽出結果をゴールデンとして固定する。以後は pytest が回帰を見張る
+python tools/update_golden.py testdata/exam_2025.docx
+```
+
+パーサに手を入れたあとは、**まず差分を目で見てから**ゴールデンを更新する。
+無条件に上書きすると退行を「正しい結果」として固定してしまう。
+
+```bash
+python tools/update_golden.py --check testdata/exam_2025.docx
+```
 
 同様に、スキーマ版を上げるたびに旧版の DB ファイルを `testdata/legacy/` に 1 つ残すと、
 `test_legacy_databases_migrate` が移行を検証する(実装計画 §7)。
+
+なお `.gitignore` は `*.sqlite` を除外している。`testdata/legacy/` の旧 DB を
+コミットするときは `git add -f` が要る。
 
 ## 未着手
 

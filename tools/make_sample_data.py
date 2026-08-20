@@ -24,6 +24,7 @@ from pathlib import Path
 from docx import Document
 from docx.oxml.ns import qn
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))  # 隣の update_golden.py
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
 from itembank.core.stats import PATTERNS  # noqa: E402
@@ -244,18 +245,13 @@ def write_broken_variants(source: Path, out_dir: Path) -> list[Path]:
 def write_golden(docx_path: Path) -> Path:
     """抽出結果をゴールデンファイルとして固定する(実装計画 §4 M3 受入条件)。
 
-    以後の回帰テストはこれと突き合わせる。パーサを直したら差分を目で見てから
-    このスクリプトを再実行して更新する。
+    実体は ``tools/update_golden.py``。書式がずれると回帰テストが誤って落ちるので、
+    こちらで別に組み立てず必ず同じ実装を通す。
     """
-    import json
+    from update_golden import golden_path, render
 
-    from itembank.io.docx_read import parse_docx
-
-    golden = docx_path.with_suffix(".golden.json")
-    data = parse_docx(docx_path).as_dict()
-    golden.write_text(
-        json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True) + "\n", encoding="utf-8"
-    )
+    golden = golden_path(docx_path)
+    golden.write_text(render(docx_path), encoding="utf-8")
     return golden
 
 
