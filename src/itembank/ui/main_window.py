@@ -17,6 +17,7 @@ from PySide6.QtGui import QAction
 from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from .. import __version__
+from ..core.updates import check_for_update as check_update
 from .bank_view import BankView
 from .choiceset_view import ChoiceSetView
 from .exam_builder import ExamBuilderView
@@ -151,6 +152,10 @@ class MainWindow(QMainWindow):
         file_menu.addAction(quit_action)
 
         help_menu = self.menuBar().addMenu("ヘルプ")
+        check = QAction("更新を確認", self)
+        check.triggered.connect(self.check_for_update)
+        help_menu.addAction(check)
+
         about = QAction("このアプリについて", self)
         about.triggered.connect(self._about)
         help_menu.addAction(about)
@@ -184,6 +189,16 @@ class MainWindow(QMainWindow):
         self.tabs.clear()
         self._build_tabs()
         self._show_startup_status()
+
+    def check_for_update(self) -> str:
+        """Releases の version.json を見に行く(実装計画 M7-5)。
+
+        押されたときにだけ、短い待ち時間で見る。裏で回して通知するほどの機能ではなく、
+        繋がらなくても知らせるだけで済む。結果は状態表示に出す。
+        """
+        _, message = check_update(__version__)
+        self.statusBar().showMessage(message, 15000)
+        return message
 
     def _about(self) -> None:
         QMessageBox.about(

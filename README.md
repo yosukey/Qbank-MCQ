@@ -264,9 +264,16 @@ v15 の書式(メタ行つき・`正答率` が 0〜1・`空白` 列)も引き�
 
 | | 内容 | 備考 |
 |---|---|---|
-| **M7** | PyInstaller spec / Inno Setup / リリース CI | Windows 実機がないと検証できないため未着手 |
-| **M1 スパイク②** | PyInstaller の実機確認・署名の要否判断 | 同上 |
+| **M7 の実機確認** | 別 PC でのインストール・起動・上書き・移行 | 定義は `packaging/` に揃っており、Linux では凍結ビルドの起動まで確認済み |
+| **M1 スパイク②** | SmartScreen の警告の出かた・署名の要否判断 | Windows 実機が要る |
 | M4 の残り | 画像の差し替え、印刷プレビュー、テンプレート差し替えの画面 | 冊子出力自体は動く |
 
-`.github/workflows/test.yml` は lint とテストのみを回す。実装計画 §8 のリリース
-パイプライン(タグ push → exe + インストーラ)は M7 で足す。
+配布の作り方と「どこまで確かめたか」は [`packaging/README.md`](packaging/README.md) にある。
+
+`.github/workflows/test.yml` は lint とテストを回す。実装計画 §8 のリリース
+パイプライン(タグ push → exe + インストーラ → Release)は
+`.github/workflows/release.yml`。
+
+```bash
+git tag v0.2.0 && git push --tags
+```

@@ -102,6 +102,31 @@ def test_show_question_switches_to_the_bank(loaded_workspace) -> None:
     assert window.bank_view.selected_candidate().question_id == question_id
 
 
+def test_check_for_update_shows_the_result(workspace, monkeypatch) -> None:
+    """更新の確認は状態表示に出すだけ(実装計画 M7-5)。自動更新はしない。"""
+    from itembank.core.updates import VersionInfo
+    from itembank.ui import main_window as module
+
+    monkeypatch.setattr(
+        module,
+        "check_update",
+        lambda current: (VersionInfo("9.9.9"), "新しい版があります: v9.9.9"),
+    )
+    window = MainWindow(workspace)
+    assert "9.9.9" in window.check_for_update()
+    assert "9.9.9" in window.statusBar().currentMessage()
+
+
+def test_check_for_update_survives_a_network_failure(workspace, monkeypatch) -> None:
+    from itembank.ui import main_window as module
+
+    monkeypatch.setattr(
+        module, "check_update", lambda current: (None, "更新を確認できませんでした")
+    )
+    window = MainWindow(workspace)
+    assert "確認できませんでした" in window.check_for_update()
+
+
 def test_main_window_backup(workspace) -> None:
     window = MainWindow(workspace)
     window._backup()

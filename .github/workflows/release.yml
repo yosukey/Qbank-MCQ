@@ -1,0 +1,140 @@
+name: release
+
+# 実装計画 §8 のリリースパイプライン:
+#
+#     git tag v0.3.0 && git push --tags
+#       → GitHub Actions (windows-latest)
+#           → pip install -r requirements.lock
+#           → pytest
+#           → PyInstaller (onedir)
+#           → Inno Setup
+#           → Release に ItemBank-0.3.0-setup.exe を添付
+#
+# **テストが落ちたらビルドしない。** 配布物だけ先に出ても直せない。
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "版番号(タグを打たずに試すとき。例 0.2.0-test)"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 実装計画 §1: Python 3.11 系に固定
+          python-version: "3.11"
+
+      - name: 版番号を決める
+        id: version
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            version="${{ github.event.inputs.version }}"
+          else
+            version="${GITHUB_REF_NAME#v}"
+          fi
+          echo "value=${version}" >> "$GITHUB_OUTPUT"
+          echo "版番号: ${version}"
+
+      - name: 依存のインストール
+        run: |
+          python -m pip install --upgrade pip
+          # exe ビルドの再現性はロックファイルに依存する(実装計画 §1)
+          pip install -r requirements.lock
+          pip install pyinstaller pytest
+
+      - name: pytest
+        # 配布物を作る前に必ず通す。Windows でしか出ない不具合もここで拾う。
+        run: pytest -q
+        env:
+          PYTHONPATH: src
+          QT_QPA_PLATFORM: offscreen
+
+      - name: 版番号をソースに反映
+        shell: bash
+        run: |
+          python - "${{ steps.version.outputs.value }}" <<'PY'
+          import re, sys
+          from pathlib import Path
+          version = sys.argv[1]
+          p = Path("src/itembank/__init__.py")
+          s = p.read_text(encoding="utf-8")
+          p.write_text(
+              re.sub(r'__version__ = "[^"]+"', f'__version__ = "{version}"', s),
+              encoding="utf-8",
+          )
+          print(f"__version__ = {version}")
+          PY
+
+      - name: PyInstaller (onedir)
+        run: pyinstaller --noconfirm --clean --distpath dist --workpath build packaging/itembank.spec
+
+      - name: 凍結した exe が起動するか
+        # 画面を出さずに起動して、すぐ閉じる。依存の収集漏れはここで落ちる。
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+          ITEMBANK_DATA_DIR: ${{ runner.temp }}\itembank-smoke
+        run: |
+          $p = Start-Process -FilePath "dist\ItemBank\ItemBank.exe" -PassThru
+          Start-Sleep -Seconds 25
+          if ($p.HasExited) {
+            Write-Error "起動直後に終了しました(終了コード $($p.ExitCode))"
+            Get-Content "$env:ITEMBANK_DATA_DIR\logs\itembank.log" -Tail 40
+            exit 1
+          }
+          Stop-Process -Id $p.Id -Force
+          Get-Content "$env:ITEMBANK_DATA_DIR\logs\itembank.log" -Tail 20
+
+      - name: Inno Setup
+        shell: pwsh
+        run: |
+          # windows-latest には既に入っているが、イメージが変わることがある。
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+          }
+          & $iscc "/DAppVersion=${{ steps.version.outputs.value }}" packaging\installer.iss
+
+      - name: version.json
+        run: python tools/make_version_json.py dist/version.json --version ${{ steps.version.outputs.value }}
+        env:
+          PYTHONPATH: src
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ItemBank-${{ steps.version.outputs.value }}
+          path: |
+            dist/ItemBank-${{ steps.version.outputs.value }}-setup.exe
+            dist/version.json
+
+      - name: Release に添付
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          # リリースノートに**スキーマ変更の有無**を必ず明記する(実装計画 §8)。
+          # version.json の schema_version がその機械可読版。
+          body: |
+            ## ItemBank ${{ steps.version.outputs.value }}
+
+            `ItemBank-${{ steps.version.outputs.value }}-setup.exe` を実行してください。
+            ユーザー単位でインストールされ、管理者権限は要りません。
+
+            - インストール先: `%LOCALAPPDATA%\Programs\ItemBank`
+            - データ: `%APPDATA%\ItemBank`(アンインストールしても残ります)
+            - スキーマ変更の有無は同梱の `version.json` の `schema_version` を参照
+              (上がっていれば起動時に自動バックアップのうえ移行されます)
+          files: |
+            dist/ItemBank-${{ steps.version.outputs.value }}-setup.exe
+            dist/version.json
