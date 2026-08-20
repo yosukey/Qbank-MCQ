@@ -1,6 +1,6 @@
 # 口腔組織学 試験問題バンクシステム
 
-[`exam_item_bank_design_v15.md`](exam_item_bank_design_v15.md)(設計書)と
+[`exam_item_bank_design_v16.md`](exam_item_bank_design_v16.md)(設計書)と
 [`exam_item_bank_implementation_plan.md`](exam_item_bank_implementation_plan.md)(実装計画)に
 基づく実装。
 
@@ -111,7 +111,7 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 | §6 選択肢セット(順序を持たない集合) | `core/choiceset.py` | `test_choiceset.py` |
 | §7 均等割 | `core/text.py` `normalize_choice` / `render_choice` | `test_text.py` |
 | §8 スキーマ | `core/db.py` | `test_migrate.py` |
-| §9.2 検証チェーン 9 項目 | `core/validate.py` `validate_stats_import` | `test_validate.py` |
+| §9.2 検証チェーン | `core/validate.py` `validate_stats_import` | `test_validate.py` |
 | §10 連携仕様(BOM + CRLF) | `io/csv_key.py`, `io/csv_stats.py` | `test_csv_io.py`, `test_csv_real.py` |
 | §11 問題タイプ | `core/typing_rules.py` | `test_typing_rules.py` |
 | §12 導出指標と自動フラグ | `core/stats.py` | `test_stats.py` |
@@ -122,7 +122,7 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 ## テスト
 
 ```bash
-.venv/bin/pytest -q          # 309 件
+.venv/bin/pytest -q
 .venv/bin/ruff check src tests tools
 .venv/bin/black --check src tests tools
 ```
@@ -184,25 +184,28 @@ python tools/update_golden.py --check testdata/exam_2025.docx
 なお `.gitignore` は `*.sqlite` を除外している。`testdata/legacy/` の旧 DB を
 コミットするときは `git add -f` が要る。
 
-## 設計書と実物が食い違っている点
+## 集計 CSV の形式
 
-設計書 §10.2 は集計 CSV の書式を規定しているが、**採点システムが実際に出す形は
-これと違う**(`testdata/item_stats_2026_02.csv` で確認)。アプリ側は両方を読む
-`io/csv_stats.py` の別名表で吸収してあるが、設計書自体は未改訂。
+設計書 §10.2 は v16 で**採点システムの実物に合わせて改訂済み**
+(`testdata/item_stats_2026_02.csv` が基準)。`io/csv_stats.py` はこの形式を正として読む。
 
-| 設計書 §10.2 | 実物 | アプリの扱い |
-|---|---|---|
-| `#試験名`〜`#受験者数` のメタ行 | 無い | 受験者数を度数合計から導出し、そのことを警告で明示 |
-| `正答率` は 0〜1 | `正答率(%)` で 0〜100 | 見出しの `(%)` を見て換算 |
-| `正答数` 列 | 無い | 正答パターン列から数える |
-| `空白` | `無解答` | 別名として同一視 |
-| — | `その他` | 31 パターンでも無回答でもない区分として N に算入 |
-| 全問が 5 肢選択 | **30 問中 24 問が記述式** | 選択式でない行は統計の対象外。件数を報告 |
-| — | `配点` `措置` `点双列相関` | 読むが保存しない。`措置` が `none` 以外なら警告 |
+```csv
+問,配点,措置,正答,正答率(%),識別係数,点双列相関,a,b,…,abcde,無解答,その他
+1,5,none,b,50.0,0.294,0.265,13,69,…,0,0,0
+7,3,none,記述式,38.4,0.706,0.478,-,-,…,-,-,-
+```
 
-記述式をバンクに登録する経路は設けていない(選択肢セットと問題タイプが
-5 肢選択を前提にしているため)。試験の記録としても残していないので、
-**出題番号 7〜30 はアプリ側の試験には現れない。**
+押さえておくべき点:
+
+- **メタ行が無い** → 受験者数は度数合計から導出し、導出したことを警告で明示する
+- **`正答率(%)` は 0〜100**、`正答数` 列は無い(正答パターン列から数える)
+- **`その他` 列は N に算入する**。外すと受験者数と正答率がずれる。ただし
+  マーク率・指示個数違反率には算入しない
+- **記述式は統計の対象外**。バンクは 5 肢選択問題のみを扱う(設計書 §11.1)ため、
+  ItemBank 側の試験に現れる出題番号は連続しない
+
+v15 の書式(メタ行つき・`正答率` が 0〜1・`空白` 列)も引き続き読める。旧データの
+取り込みに備えて残してあり、`io/csv_stats.py` が方言を自動判定する。
 
 ## 未着手
 

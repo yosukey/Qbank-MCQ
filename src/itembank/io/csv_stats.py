@@ -1,41 +1,26 @@
-"""採点システムから届く集計 CSV の読み取り。
+"""採点システムから届く集計 CSV の読み取り(設計書 §10.2)。
 
-**2 つの方言を読む。** 設計書 §10.2 が想定していた書式と、実際に採点システムから
-出てくる書式が食い違っていたため、列名の別名表で吸収する。
-
-``ssdb`` — 実物(こちらが実運用の入力)::
+設計書 §10.2 の形式が**正**。採点側の出力をそのまま受け取り、ItemBank 側で
+事前加工を要求しない::
 
     問,配点,措置,正答,正答率(%),識別係数,点双列相関,a,b,…,abcde,無解答,その他
     1,5,none,b,50.0,0.294,0.265,13,69,24,20,12,0,…,0,0
     7,3,none,記述式,38.4,0.706,0.478,-,-,-,…,-,-
 
-``design`` — 設計書 §10.2 の書式(メタ行つき)::
+読み取りで押さえる点(設計書 §10.2 の (1)〜(4)):
 
-    #受験者数,139
-    問題,正答肢,正答率,正答数,識別係数,a,b,…,abcde,空白
-    1,ad,0.8058,112,0.529,0,1,…,0,0
+- **メタ行が無い。** 受験者数は度数列の合計から導く(``StatsMeta.derived_n``)
+- **``正答率(%)`` は 0〜100。** 見出しの ``(%)`` を見て 0〜1 に直す
+- **``正答数`` 列が無い。** 正答パターン列の度数がそれにあたる
+- **``その他`` 列がある。** 31 パターンでも無回答でもない区分として N に算入する
+- **記述式が混在する。** 度数欄が丸ごと空の行はバンクの対象外として ``non_mcq_rows`` に分ける
 
-実物との主な違いと、その扱い:
-
-============== ================================ ==========================================
-項目           実物                             扱い
-============== ================================ ==========================================
-メタ行         無い                             受験者数は度数合計から導く
-``正答率``     ``正答率(%)`` で 0〜100          見出しの ``(%)`` を見て 0〜1 に直す
-``正答数``     列が無い                         正答パターン列の度数から数える
-``空白``       ``無解答``                       別名として同じものに寄せる
-``その他``     ある                             31 パターンでも無回答でもない区分として N に算入
-記述式         ``正答=記述式``・度数はすべて    MCQ ではないので統計の対象から外し、
-               ``-``                            件数だけ報告する
-``配点``       ある                             読むが保存しない
-``措置``       ある(``none`` 等)              ``none`` 以外は警告する
-``点双列相関`` ある                             読むが保存しない(識別係数を正とする)
-============== ================================ ==========================================
+設計書 v15 の書式(メタ行つき・``正答率`` が 0〜1・``空白`` 列)も読める。旧データの
+取り込みに備えて残してあり、列名の別名表で吸収して ``legacy`` 方言と判定する。
 
 **このモジュールは読むだけで、正しさの判定はしない。** 検証は
-``core.validate.validate_stats_import``(設計書 §9.2 の 9 項目)が行う。
-壊れた CSV でも「どこが壊れているか」を示せるよう、ここでは例外を投げずに
-読めたものをそのまま持ち帰る。
+``core.validate.validate_stats_import``(設計書 §9.2)が行う。壊れた CSV でも
+「どこが壊れているか」を示せるよう、ここでは例外を投げずに読めたものをそのまま持ち帰る。
 """
 
 from __future__ import annotations
@@ -47,7 +32,7 @@ from pathlib import Path
 from ..core.stats import BLANK, OTHER
 from ..core.typing_rules import LABELS, normalize_correct
 
-#: メタ行の接頭辞(``design`` 方言のみ)。
+#: メタ行の接頭辞(``legacy`` 方言のみ)。
 META_PREFIX = "#"
 
 #: 出題番号の列名。
@@ -56,7 +41,7 @@ POSITION_ALIASES = ("問題", "問", "設問", "問題番号")
 CORRECT_ALIASES = ("正答肢", "正答")
 #: 正答率の列名。``(%)`` を含むものは 0〜100 とみなす。
 P_ALIASES = ("正答率", "正答率(%)", "正答率(%)", "正答率％")
-#: 正答数の列名(``ssdb`` には無い)。
+#: 正答数の列名(設計書 §10.2 の形式には無い。v15 形式にはある)。
 N_CORRECT_ALIASES = ("正答数",)
 #: 識別係数の列名。
 DISC_ALIASES = ("識別係数", "識別指数", "D")
@@ -74,8 +59,10 @@ NON_MCQ_MARKERS = ("記述式", "論述式", "記述", "自由記述")
 #: 度数欄が空であることを表す記号。
 EMPTY_CELL_MARKERS = ("-", "‐", "―", "—", "ー", "")
 
+#: 設計書 §10.2 の形式(正)。
 DIALECT_SSDB = "ssdb"
-DIALECT_DESIGN = "design"
+#: 設計書 v15 の形式。旧データ取り込み用に読めるようにしてある。
+DIALECT_LEGACY = "legacy"
 
 KIND_MCQ = "mcq"
 KIND_NON_MCQ = "non_mcq"
@@ -87,7 +74,7 @@ class StatsFormatError(ValueError):
 
 @dataclass
 class StatsMeta:
-    """``#`` 行から読んだ試験メタ情報。``ssdb`` 方言では空になる。"""
+    """``#`` 行から読んだ試験メタ情報。設計書 §10.2 の形式では空になる。"""
 
     raw: dict[str, str] = field(default_factory=dict)
     #: メタ行が無いとき、度数合計から導いた受験者数。
@@ -192,7 +179,7 @@ class StatsFile:
     #: 固定列のうち欠けていたもの。
     missing_fixed_columns: list[str] = field(default_factory=list)
     #: どの方言と判定したか。
-    dialect: str = DIALECT_DESIGN
+    dialect: str = DIALECT_LEGACY
     #: 正答率が 0〜100 で書かれていたか。
     percent_scale: bool = False
     source_file: str = ""
@@ -340,7 +327,7 @@ def parse_stats_csv(path: Path | str) -> StatsFile:
         # 重複として検証チェーンが気づけるよう、集合にはしない。
         pattern_columns_found=list(layout.counts.values()),
         missing_fixed_columns=layout.missing_fixed(),
-        dialect=DIALECT_SSDB if layout.percent_scale or not meta.raw else DIALECT_DESIGN,
+        dialect=DIALECT_SSDB if layout.percent_scale or not meta.raw else DIALECT_LEGACY,
         percent_scale=layout.percent_scale,
         source_file=str(source),
     )

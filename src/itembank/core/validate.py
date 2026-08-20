@@ -2,7 +2,7 @@
 
 3 か所の検証をまとめて持つ:
 
-1. **統計取込**(設計書 §9.2 の 9 項目)— 不一致は原則ブロック
+1. **統計取込**(設計書 §9.2)— 不一致は原則ブロック
 2. **docx ⇔ 集計CSV の相互検証**(実装計画 §4 M3)
 3. **finalize 前チェック**(設計書 §13.3)
 
@@ -27,7 +27,8 @@ from .typing_rules import (
     normalize_correct,
 )
 
-#: 正答率の突き合わせ許容差。CSV の正答率は小数第 4 位までで届く(設計書 §10.2)。
+#: 正答率の突き合わせ許容差(設計書 §9.2-4)。``正答率(%)`` は小数第 1 位までに
+#: 丸められて届くので、丸め誤差は最大 0.0005。それを吸収する幅に取る。
 P_TOLERANCE = 1e-3
 
 
@@ -75,7 +76,7 @@ def validate_stats_import(
     n_examinees: int | None = None,
     n_non_mcq: int = 0,
 ) -> list[ValidationIssue]:
-    """設計書 §9.2 の 9 項目を順に見る。
+    """設計書 §9.2 のチェーンを順に見る。
 
     ``exam_items`` は ``position -> correct_asked``。finalize 済みの試験には既に
     「どの版を何番として出したか」が記録されているので、CSV は統計を与えるだけでよい
@@ -103,10 +104,10 @@ def validate_stats_import(
             )
         )
 
-    # --- 8. パターン列名が 31 通りと過不足なく一致 -------------------------
+    # --- 8/10. 度数列名が 31 パターン + 無解答 と一致し、重複が無い ---------
     issues.extend(_check_pattern_columns(pattern_columns_found))
 
-    # --- 9. CSV の行数 = exam_items の設問数 -------------------------------
+    # --- 9. CSV の選択式行数 = exam_items の設問数 -------------------------
     if len(rows) != len(exam_items):
         issues.append(
             _issue(
@@ -120,7 +121,7 @@ def validate_stats_import(
     if not rows:
         return issues
 
-    # --- 7. 度数が非負整数 --------------------------------------------------
+    # --- 3/7. 度数が非負整数で、一部だけ空になっていない --------------------
     for row in rows:
         if row.unreadable:
             issues.append(
@@ -148,7 +149,7 @@ def validate_stats_import(
                 )
             )
 
-    # --- 1. 各行の 32 列の度数合計が全設問で同一 ----------------------------
+    # --- 1. 各行の度数合計が全設問で同一 -----------------------------------
     totals = {row.position: row.total for row in rows}
     distinct = sorted(set(totals.values()))
     if len(distinct) > 1:
@@ -165,7 +166,7 @@ def validate_stats_import(
 
     n = distinct[0] if len(distinct) == 1 else None
 
-    # --- 2. 度数合計 = メタ行の受験者数 ------------------------------------
+    # --- 2. 受験者数。メタ行があれば照合、無ければ度数合計から導出 ----------
     if n_examinees is None:
         # 実物の集計 CSV にはメタ行が無い。突き合わせ相手がいないことを黙って
         # 済ませず、受験者数は度数合計から導いたのだと明示する。
@@ -207,7 +208,7 @@ def validate_stats_import(
                 )
             )
 
-        # --- 5. CSV の正答肢 = exam_items.correct_asked --------------------
+        # --- 5. CSV の正答 = exam_items.correct_asked ---------------------
         if expected_correct is None:
             issues.append(
                 _issue(
@@ -229,7 +230,8 @@ def validate_stats_import(
         row_total = row.total
         counted = row.counts_raw.get(normalize_correct(row.correct), 0)
 
-        # --- 3. 正答肢に対応するパターン列の値 = 正答数 --------------------
+        # 正答数との照合は v15 形式にしか列が無い。現行の §10.2 形式では
+        # 行われず、正答肢の対応づけは下の #4(正答率)が担保する。
         if row.n_correct_reported is not None and counted != row.n_correct_reported:
             issues.append(
                 _issue(
@@ -240,7 +242,7 @@ def validate_stats_import(
                 )
             )
 
-        # --- 4. 正答数 / N = 正答率(丸め誤差内) ---------------------------
+        # --- 4. 正答パターン列の度数 / N = 正答率(丸め誤差内) --------------
         if row.p_reported is not None and row_total:
             recomputed = counted / row_total
             if abs(recomputed - row.p_reported) > P_TOLERANCE:
