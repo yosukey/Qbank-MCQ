@@ -1,0 +1,55 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "itembank"
+version = "0.1.0"
+description = "口腔組織学 試験問題バンクシステム"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "SQLAlchemy>=2.0",
+    "python-docx>=1.1",
+    "openpyxl>=3.1",
+]
+
+[project.optional-dependencies]
+gui = ["PySide6>=6.6", "matplotlib>=3.8"]
+dev = ["pytest>=8.0", "ruff>=0.4", "black>=24.0"]
+
+[project.scripts]
+itembank = "itembank.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+itembank = ["resources/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
+filterwarnings = ["error::DeprecationWarning:itembank.*"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# テストとデータ生成では zip の長さが自明なので strict= を求めない。
+"tests/*" = ["B905"]
+"tools/*" = ["B905"]
+
+[tool.pyright]
+include = ["src"]
+typeCheckingMode = "basic"
+reportMissingImports = "warning"

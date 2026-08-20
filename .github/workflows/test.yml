@@ -1,0 +1,48 @@
+name: test
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 実装計画 §1: Python 3.11 系に固定
+          # (3.12 以降は PyInstaller や Qt の対応が遅れることがある)
+          python-version: "3.11"
+
+      - name: 依存のインストール
+        run: |
+          python -m pip install --upgrade pip
+          # exe ビルドの再現性のため、実行時依存はロックファイルから入れる
+          pip install -r requirements.lock
+          pip install pytest ruff black
+
+      - name: lint
+        run: |
+          ruff check src tests tools
+          black --check src tests tools
+
+      - name: pytest
+        run: pytest -q
+        env:
+          PYTHONPATH: src
+
+      - name: サンプルデータの生成が決定的か
+        # tools/make_sample_data.py は乱数種を固定してあり、生成物は毎回同じ内容になる。
+        # ただし .docx は zip なので格納時刻がバイト列に入り、ハッシュは一致しない。
+        # そこでテキスト成果物(集計CSV とゴールデン JSON)だけを突き合わせる。
+        # docx の中身自体は pytest の test_sample_docx_matches_golden が担保する。
+        run: |
+          python tools/make_sample_data.py /tmp/regen
+          for f in item_stats_2025.csv exam_2025.golden.json broken_wrong_correct.csv; do
+            diff "testdata/sample/$f" "/tmp/regen/$f"
+          done
+        env:
+          PYTHONPATH: src

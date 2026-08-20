@@ -1,0 +1,462 @@
+{
+  "questions": [
+    {
+      "choices": [
+        {
+          "html": "歯根膜",
+          "label": "a"
+        },
+        {
+          "html": "エナメル質",
+          "label": "b"
+        },
+        {
+          "html": "セメント質",
+          "label": "c"
+        },
+        {
+          "html": "歯髄",
+          "label": "d"
+        },
+        {
+          "html": "象牙質",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 1,
+      "stem_html": "最も硬い組織はどれか。1つ選べ。",
+      "stem_plain": "最も硬い組織はどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "歯髄",
+          "label": "a"
+        },
+        {
+          "html": "セメント質",
+          "label": "b"
+        },
+        {
+          "html": "エナメル質",
+          "label": "c"
+        },
+        {
+          "html": "歯根膜",
+          "label": "d"
+        },
+        {
+          "html": "象牙質",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "X2",
+      "number": 2,
+      "stem_html": "血管が分布するのはどれか。2つ選べ。",
+      "stem_plain": "血管が分布するのはどれか。2つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "歯髄",
+          "label": "a"
+        },
+        {
+          "html": "セメント質",
+          "label": "b"
+        },
+        {
+          "html": "エナメル質",
+          "label": "c"
+        },
+        {
+          "html": "歯根膜",
+          "label": "d"
+        },
+        {
+          "html": "象牙質",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 3,
+      "stem_html": "酸に溶け<strong>ない</strong>のはどれか。1つ選べ。",
+      "stem_plain": "酸に溶けないのはどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "歯髄",
+          "label": "a"
+        },
+        {
+          "html": "エナメル質",
+          "label": "b"
+        },
+        {
+          "html": "象牙質",
+          "label": "c"
+        },
+        {
+          "html": "セメント質",
+          "label": "d"
+        },
+        {
+          "html": "歯根膜",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "XX",
+      "number": 4,
+      "stem_html": "上皮由来のものをすべて選べ。",
+      "stem_plain": "上皮由来のものをすべて選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "頰骨",
+          "label": "a"
+        },
+        {
+          "html": "導管",
+          "label": "b"
+        },
+        {
+          "html": "死帯",
+          "label": "c"
+        },
+        {
+          "html": "歯堤",
+          "label": "d"
+        },
+        {
+          "html": "横紋",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 5,
+      "stem_html": "横紋が見られるのはどれか。1つ選べ。",
+      "stem_plain": "横紋が見られるのはどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "死帯",
+          "label": "a"
+        },
+        {
+          "html": "頰骨",
+          "label": "b"
+        },
+        {
+          "html": "導管",
+          "label": "c"
+        },
+        {
+          "html": "歯堤",
+          "label": "d"
+        },
+        {
+          "html": "横紋",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 6,
+      "stem_html": "歯の発生に関わるのはどれか。1つ選べ。",
+      "stem_plain": "歯の発生に関わるのはどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "死帯",
+          "label": "a"
+        },
+        {
+          "html": "歯堤",
+          "label": "b"
+        },
+        {
+          "html": "導管",
+          "label": "c"
+        },
+        {
+          "html": "横紋",
+          "label": "d"
+        },
+        {
+          "html": "頰骨",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "X2",
+      "number": 7,
+      "stem_html": "骨に含まれ<strong>ない</strong>のはどれか。2つ選べ。",
+      "stem_plain": "骨に含まれないのはどれか。2つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "Meissner 小体",
+          "label": "a"
+        },
+        {
+          "html": "Ruffini 終末",
+          "label": "b"
+        },
+        {
+          "html": "Merkel 盤",
+          "label": "c"
+        },
+        {
+          "html": "Krause 小体",
+          "label": "d"
+        },
+        {
+          "html": "自由神経終末",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "X3",
+      "number": 8,
+      "stem_html": "触覚受容器はどれか。3つ選べ。",
+      "stem_plain": "触覚受容器はどれか。3つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "Meissner 小体",
+          "label": "a"
+        },
+        {
+          "html": "Ruffini 終末",
+          "label": "b"
+        },
+        {
+          "html": "Krause 小体",
+          "label": "c"
+        },
+        {
+          "html": "自由神経終末",
+          "label": "d"
+        },
+        {
+          "html": "Merkel 盤",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 9,
+      "stem_html": "有髄神経終末で<strong>ない</strong>のはどれか。1つ選べ。",
+      "stem_plain": "有髄神経終末でないのはどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "Meissner 小体",
+          "label": "a"
+        },
+        {
+          "html": "Merkel 盤",
+          "label": "b"
+        },
+        {
+          "html": "Krause 小体",
+          "label": "c"
+        },
+        {
+          "html": "Ruffini 終末",
+          "label": "d"
+        },
+        {
+          "html": "自由神経終末",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "XX",
+      "number": 10,
+      "stem_html": "圧覚に関与するものをすべて選べ。",
+      "stem_plain": "圧覚に関与するものをすべて選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "胎生 10 週",
+          "label": "a"
+        },
+        {
+          "html": "生後 6 か月",
+          "label": "b"
+        },
+        {
+          "html": "出生時",
+          "label": "c"
+        },
+        {
+          "html": "胎生 3-4 週",
+          "label": "d"
+        },
+        {
+          "html": "胎生 6-7 週",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 11,
+      "stem_html": "歯堤が形成される時期はどれか。1つ選べ。",
+      "stem_plain": "歯堤が形成される時期はどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "胎生 10 週",
+          "label": "a"
+        },
+        {
+          "html": "出生時",
+          "label": "b"
+        },
+        {
+          "html": "胎生 6-7 週",
+          "label": "c"
+        },
+        {
+          "html": "胎生 3-4 週",
+          "label": "d"
+        },
+        {
+          "html": "生後 6 か月",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 12,
+      "stem_html": "エナメル質の石灰化が始まる時期はどれか。1つ選べ。",
+      "stem_plain": "エナメル質の石灰化が始まる時期はどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "滑膜 B 型細胞",
+          "label": "a"
+        },
+        {
+          "html": "滑膜 A 型細胞",
+          "label": "b"
+        },
+        {
+          "html": "骨芽細胞",
+          "label": "c"
+        },
+        {
+          "html": "セメント芽細胞",
+          "label": "d"
+        },
+        {
+          "html": "破骨細胞",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 13,
+      "stem_html": "骨吸収を担うのはどれか。1つ選べ。",
+      "stem_plain": "骨吸収を担うのはどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "滑膜 B 型細胞",
+          "label": "a"
+        },
+        {
+          "html": "骨芽細胞",
+          "label": "b"
+        },
+        {
+          "html": "滑膜 A 型細胞",
+          "label": "c"
+        },
+        {
+          "html": "破骨細胞",
+          "label": "d"
+        },
+        {
+          "html": "セメント芽細胞",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "A",
+      "number": 14,
+      "stem_html": "<strong>ATP</strong> を必要とし<strong>ない</strong>のはどれか。1つ選べ。",
+      "stem_plain": "ATP を必要としないのはどれか。1つ選べ。"
+    },
+    {
+      "choices": [
+        {
+          "html": "骨芽細胞",
+          "label": "a"
+        },
+        {
+          "html": "セメント芽細胞",
+          "label": "b"
+        },
+        {
+          "html": "滑膜 A 型細胞",
+          "label": "c"
+        },
+        {
+          "html": "破骨細胞",
+          "label": "d"
+        },
+        {
+          "html": "滑膜 B 型細胞",
+          "label": "e"
+        }
+      ],
+      "image_paths": [],
+      "issues": [],
+      "item_type": "X2",
+      "number": 15,
+      "stem_html": "Ca<sup>2+</sup> と PO<sub>4</sub><sup>3-</sup> を沈着させるのはどれか。2つ選べ。",
+      "stem_plain": "Ca2+ と PO43- を沈着させるのはどれか。2つ選べ。"
+    }
+  ],
+  "removals": [],
+  "skipped": [
+    "口腔組織学定期試験　2025-08-25",
+    "学年　　番号　　氏名",
+    "＜以上 15 設問＞",
+    "1"
+  ],
+  "unexpected_formats": []
+}
