@@ -18,6 +18,8 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 
 from .. import __version__
 from .bank_view import BankView
+from .choiceset_view import ChoiceSetView
+from .item_view import ItemView
 from .question_detail import QuestionDetail
 from .question_editor import QuestionEditor
 from .settings_view import SettingsView
@@ -54,11 +56,21 @@ class MainWindow(QMainWindow):
         self.bank_view.editRequested.connect(lambda qid: self.open_editor(question_id=qid))
         self.bank_view.detailRequested.connect(self.open_detail)
 
+        self.choiceset_view = ChoiceSetView(self.workspace, self)
+        self.choiceset_view.createFromSetRequested.connect(
+            lambda set_id: self.open_editor(choice_set_id=set_id)
+        )
+        self.choiceset_view.questionRequested.connect(self.open_detail)
+
+        self.item_view = ItemView(self.workspace, self)
+
         self.settings_view = SettingsView(self.workspace, self)
         self.settings_view.settingsChanged.connect(self.refresh_all)
         self.settings_view.databaseRestored.connect(self._reopen)
 
         self.tabs.addTab(self.bank_view, "問題バンク")
+        self.tabs.addTab(self.choiceset_view, "選択肢セット")
+        self.tabs.addTab(self.item_view, "選択肢アイテム")
         self.tabs.addTab(self.settings_view, "設定")
 
     # -- 問題の編集と詳細(設計書 §14-2, §14-3)-----------------------------

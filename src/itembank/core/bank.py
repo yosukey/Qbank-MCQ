@@ -144,6 +144,92 @@ def rebuild_all_links(session: Session, *, min_shared: int = 3) -> int:
     return session.query(ChoiceSetLink).count()
 
 
+def add_link(session: Session, set_a: int, set_b: int, *, note: str | None = None) -> ChoiceSetLink:
+    """手動でリンクを張る(設計書 §6.3: 自動リンクは提案であり手動で追加できる)。"""
+    if set_a == set_b:
+        raise ValueError("同じセット同士はリンクできません")
+    a, b = sorted((set_a, set_b))
+    link = session.get(ChoiceSetLink, (a, b))
+    shared = cs.set_similarity(
+        session.get(ChoiceSet, a).item_htmls(), session.get(ChoiceSet, b).item_htmls()
+    )
+    if link is None:
+        link = ChoiceSetLink(set_a=a, set_b=b)
+        session.add(link)
+    link.shared = shared
+    link.relation = cs.relation_for(shared) or "手動"
+    link.note = note
+    session.flush()
+    return link
+
+
+def remove_link(session: Session, set_a: int, set_b: int) -> bool:
+    """リンクを解除する。解除できたら ``True``。"""
+    a, b = sorted((set_a, set_b))
+    link = session.get(ChoiceSetLink, (a, b))
+    if link is None:
+        return False
+    session.delete(link)
+    session.flush()
+    return True
+
+
+def merge_choice_sets(session: Session, source: ChoiceSet, target: ChoiceSet) -> int:
+    """``source`` を ``target`` に統合する(設計書 §6.3 の「統合を提案」)。
+
+    署名が同じセットは作られないので、統合したくなるのは**マークアップ違いで
+    別セットになってしまった**ときである(``audit_tagless_duplicates`` が拾う)。
+    そこで対応付けはタグ除去後のテキストで行う。
+
+    印字の見え方は変えない。``choice_order`` を ``target`` の項目番号に張り替える
+    だけなので、**正答(印字記号)も過去の統計もそのまま通じる**。
+
+    1 対 1 に対応付かないときは何もせず ``ValueError``。
+    """
+    if source.id == target.id:
+        raise ValueError("同じセットは統合できません")
+
+    by_plain: dict[str, list[int]] = {}
+    for item in target.items:
+        by_plain.setdefault(strip_tags(item.text_html), []).append(item.item_no)
+
+    mapping: dict[int, int] = {}
+    for item in source.items:
+        key = strip_tags(item.text_html)
+        candidates = by_plain.get(key, [])
+        if len(candidates) != 1:
+            raise ValueError(
+                f"項目「{key}」が {target.id} の項目と 1 対 1 に対応しません。統合できません"
+            )
+        mapping[item.item_no] = candidates[0]
+    if len(set(mapping.values())) != len(mapping):
+        raise ValueError("複数の項目が同じ項目に対応しました。統合できません")
+
+    moved = 0
+    versions = session.scalars(
+        select(QuestionVersion).where(QuestionVersion.choice_set_id == source.id)
+    ).all()
+    for version in versions:
+        printed = cs.parse_choice_order(version.choice_order)
+        version.choice_set_id = target.id
+        version.choice_order = cs.format_choice_order([mapping[no] for no in printed])
+        moved += 1
+
+    for link in session.scalars(
+        select(ChoiceSetLink).where(
+            (ChoiceSetLink.set_a == source.id) | (ChoiceSetLink.set_b == source.id)
+        )
+    ).all():
+        session.delete(link)
+    session.flush()
+
+    session.delete(source)
+    session.flush()
+    refresh_links_for(session, target)
+    log.info("選択肢セット %s を %s に統合しました(%d 版)", source.id, target.id, moved)
+    return moved
+
+
 def linked_set_ids(session: Session, set_id: int) -> set[int]:
     """``set_id`` に自動リンクされたセット ID(露出管理で使う。設計書 §6.4-1)。"""
     rows = session.execute(

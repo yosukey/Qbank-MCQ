@@ -17,7 +17,7 @@ import statistics
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from .bank import tag_names
@@ -370,6 +370,135 @@ def question_history(session: Session, question_id: int) -> QuestionHistory:
         parent=derivation_parent(session, question),
         children=derived_children(session, question),
     )
+
+
+# ---------------------------------------------------------------------------
+# 選択肢セット画面の材料(設計書 §14-4)
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class SetLinkView:
+    """近似セットの関連 1 本。"""
+
+    other_id: int
+    shared: int | None
+    relation: str | None
+    note: str | None
+
+
+@dataclass(frozen=True)
+class ChoiceSetSummary:
+    """セット一覧の 1 行。"""
+
+    set_id: int
+    name: str | None
+    items: list[tuple[int, str]]
+    n_questions: int
+    links: list[SetLinkView]
+
+    def preview(self, limit: int = 4) -> str:
+        from .text import strip_tags
+
+        heads = [strip_tags(html) for _, html in self.items[:limit]]
+        tail = "…" if len(self.items) > limit else ""
+        return "、".join(heads) + tail
+
+
+def choice_set_summaries(session: Session) -> list[ChoiceSetSummary]:
+    """セット一覧と近似リンク(設計書 §14-4)。"""
+    from .db import ChoiceSetLink
+
+    counts = dict(
+        session.execute(
+            select(QuestionVersion.choice_set_id, func.count()).group_by(
+                QuestionVersion.choice_set_id
+            )
+        ).all()
+    )
+    links: dict[int, list[SetLinkView]] = {}
+    for link in session.scalars(select(ChoiceSetLink)).all():
+        links.setdefault(link.set_a, []).append(
+            SetLinkView(link.set_b, link.shared, link.relation, link.note)
+        )
+        links.setdefault(link.set_b, []).append(
+            SetLinkView(link.set_a, link.shared, link.relation, link.note)
+        )
+
+    out: list[ChoiceSetSummary] = []
+    for cset in session.scalars(select(ChoiceSet).order_by(ChoiceSet.id)).all():
+        out.append(
+            ChoiceSetSummary(
+                set_id=cset.id,
+                name=cset.name,
+                items=[(item.item_no, item.text_html) for item in cset.items],
+                n_questions=int(counts.get(cset.id, 0)),
+                links=sorted(links.get(cset.id, []), key=lambda link: -(link.shared or 0)),
+            )
+        )
+    return out
+
+
+@dataclass(frozen=True)
+class SetMatrixRow:
+    """セット内の 1 設問 × 項目のマーク率(設計書 §14-4 のマトリクス)。"""
+
+    question_id: int
+    qversion_id: int
+    version_no: int
+    stem_html: str
+    exam_id: int | None
+    exam_date: str | None
+    #: 項目番号 → 周辺マーク率。統計が無ければ空。
+    rates: dict[int, float | None]
+    #: 正答だった項目番号。
+    correct_item_nos: tuple[int, ...]
+
+
+def set_item_matrix(session: Session, choice_set_id: int) -> list[SetMatrixRow]:
+    """セットを使った全設問について、項目ごとのマーク率を並べる(設計書 §14-4)。
+
+    「この項目はどの問い方のときに効いたか」を横に並べて読むための表。
+    順序が変わっても項目単位で追える(設計書 §6.4-5)ので、``choice_order`` を
+    通して印字記号を項目番号に戻す。
+    """
+    from .choiceset import correct_to_item_nos, item_no_to_label
+
+    out: list[SetMatrixRow] = []
+    versions = session.scalars(
+        select(QuestionVersion)
+        .where(QuestionVersion.choice_set_id == choice_set_id)
+        .order_by(QuestionVersion.question_id, QuestionVersion.version_no)
+    ).all()
+
+    for version in versions:
+        appearance = session.execute(
+            select(ExamItem.exam_id, Exam.exam_date)
+            .join(Exam, Exam.id == ExamItem.exam_id)
+            .where(ExamItem.qversion_id == version.id)
+            .order_by(Exam.exam_date.desc())
+        ).first()
+        exam_id = appearance[0] if appearance else None
+        stat = session.get(ItemStatRow, (exam_id, version.id)) if exam_id else None
+
+        rates: dict[int, float | None] = {}
+        for item_no in range(1, 6):
+            label = item_no_to_label(item_no, version.choice_order)
+            rates[item_no] = getattr(stat, f"sel_{label}") if stat else None
+
+        out.append(
+            SetMatrixRow(
+                question_id=version.question_id,
+                qversion_id=version.id,
+                version_no=version.version_no,
+                stem_html=version.stem_html,
+                exam_id=exam_id,
+                exam_date=appearance[1] if appearance else None,
+                rates=rates,
+                correct_item_nos=correct_to_item_nos(version.correct, version.choice_order),
+            )
+        )
+    return out
 
 
 def choice_item_appearances(session: Session):
