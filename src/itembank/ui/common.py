@@ -11,15 +11,7 @@ from __future__ import annotations
 from collections.abc import Sequence
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import (
-    QDialog,
-    QDialogButtonBox,
-    QLabel,
-    QListWidget,
-    QListWidgetItem,
-    QVBoxLayout,
-    QWidget,
-)
+from PySide6.QtWidgets import QLabel, QListWidget, QListWidgetItem, QWidget
 
 from ..core.text import strip_tags
 from ..core.typing_rules import ValidationIssue
@@ -58,13 +50,6 @@ def rich_label(html: str, parent: QWidget | None = None) -> QLabel:
     return label
 
 
-def issue_lines(issues: Sequence[ValidationIssue]) -> list[str]:
-    """ブロックを先、警告を後に並べた表示行。"""
-    blockers = [f"{BLOCK_PREFIX} {i.message}" for i in issues if i.blocking]
-    warnings = [f"{WARN_PREFIX} {i.message}" for i in issues if not i.blocking]
-    return blockers + warnings
-
-
 def fill_issue_list(widget: QListWidget, issues: Sequence[ValidationIssue]) -> None:
     """検証結果をリストに流し込む。ブロックは赤く出す。"""
     widget.clear()
@@ -75,24 +60,3 @@ def fill_issue_list(widget: QListWidget, issues: Sequence[ValidationIssue]) -> N
         widget.addItem(item)
     if not issues:
         widget.addItem(QListWidgetItem("問題ありません"))
-
-
-class IssueDialog(QDialog):
-    """検証結果だけを見せる確認ダイアログ。"""
-
-    def __init__(
-        self, issues: Sequence[ValidationIssue], *, title: str, parent: QWidget | None = None
-    ) -> None:
-        super().__init__(parent)
-        self.setWindowTitle(title)
-        self.list = QListWidget(self)
-        fill_issue_list(self.list, issues)
-
-        buttons = QDialogButtonBox(QDialogButtonBox.StandardButton.Close, self)
-        buttons.rejected.connect(self.reject)
-        buttons.accepted.connect(self.accept)
-
-        layout = QVBoxLayout(self)
-        layout.addWidget(self.list)
-        layout.addWidget(buttons)
-        self.resize(560, 320)

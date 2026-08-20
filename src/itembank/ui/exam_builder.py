@@ -21,7 +21,6 @@ from PySide6.QtWidgets import (
     QAbstractItemView,
     QComboBox,
     QDoubleSpinBox,
-    QFormLayout,
     QGridLayout,
     QGroupBox,
     QHBoxLayout,
@@ -250,9 +249,6 @@ class ExamBuilderView(QWidget):
         self.check_list = QListWidget(box)
         self.check_list.setMaximumHeight(120)
         layout.addWidget(self.check_list)
-
-        form = QFormLayout()
-        layout.addLayout(form)
         return box
 
     # -- 読み込み -----------------------------------------------------------

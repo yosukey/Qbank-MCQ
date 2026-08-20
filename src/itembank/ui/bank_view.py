@@ -190,8 +190,6 @@ class BankView(QWidget):
     #: 新規作成(白紙 / 複製元の question_id)。
     createRequested = Signal()
     duplicateRequested = Signal(int)
-    #: 一覧が読み直された。
-    reloaded = Signal()
 
     def __init__(self, workspace, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -331,7 +329,6 @@ class BankView(QWidget):
         self.model.set_candidates(candidates)
         self._reload_choices(candidates)
         self.apply_filter()
-        self.reloaded.emit()
 
     def _reload_choices(self, candidates: list[Candidate]) -> None:
         def refill(box: QComboBox, first: tuple[str, object], values: list[tuple[str, object]]):

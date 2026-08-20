@@ -15,8 +15,8 @@ from itembank.core.text import normalize_choice
 pytest.importorskip("PySide6")
 
 from itembank.ui.richtext import (  # noqa: E402 - importorskip の後に読む
+    FormatToolBar,
     RichTextEdit,
-    RichTextField,
     document_to_html,
     format_tags,
     html_to_document,
@@ -133,15 +133,39 @@ def test_toggle_rejects_unknown_tag(qapp) -> None:
         edit.toggle_tag("u")
 
 
-def test_field_has_exactly_four_buttons(qapp) -> None:
+def test_toolbar_has_exactly_four_buttons(qapp) -> None:
     """書式ボタンは 4 つのみ(設計書 §14-2)。"""
-    field = RichTextField()
-    assert sorted(field.buttons) == ["i", "strong", "sub", "sup"]
+    toolbar = FormatToolBar()
+    assert sorted(toolbar.buttons) == ["i", "strong", "sub", "sup"]
+
+
+def test_toolbar_applies_to_the_edit_it_last_touched(qapp) -> None:
+    """選択肢 5 つに 5 組のボタンを並べないための仕掛け。"""
+    from PySide6.QtGui import QTextCursor
+
+    toolbar = FormatToolBar()
+    first, second = RichTextEdit(), RichTextEdit()
+    toolbar.attach(first)
+    toolbar.attach(second)
+    assert toolbar.current() is first, "最初に繋いだ欄が既定"
+
+    second.focusReceived.emit()
+    assert toolbar.current() is second
+
+    second.set_fragment_html("斜体にする")
+    cursor = second.textCursor()
+    cursor.setPosition(0)
+    cursor.setPosition(2, QTextCursor.MoveMode.KeepAnchor)
+    second.setTextCursor(cursor)
+    toolbar.apply("i")
+
+    assert second.fragment_html() == "<i>斜体</i>にする"
+    assert first.fragment_html() == "", "触っていない欄は変わらない"
 
 
 def test_html_changed_signal(qapp) -> None:
     seen: list[str] = []
-    field = RichTextField()
-    field.htmlChanged.connect(seen.append)
-    field.set_fragment_html("かたち")
+    edit = RichTextEdit()
+    edit.htmlChanged.connect(seen.append)
+    edit.set_fragment_html("かたち")
     assert seen[-1] == "かたち"

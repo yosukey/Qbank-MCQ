@@ -26,9 +26,9 @@ from PySide6.QtGui import (
     QTextCursor,
     QTextDocument,
 )
-from PySide6.QtWidgets import QHBoxLayout, QLabel, QTextEdit, QToolButton, QVBoxLayout, QWidget
+from PySide6.QtWidgets import QHBoxLayout, QTextEdit, QToolButton, QWidget
 
-from ..core.text import ALLOWED_TAGS, Run, merge_runs, render_choice, runs_to_html
+from ..core.text import ALLOWED_TAGS, Run, merge_runs, runs_to_html
 
 #: 書式ボタンは強調・イタリック・上付き・下付きの 4 つのみ(設計書 §14-2)。
 FORMAT_BUTTONS: tuple[tuple[str, str, str], ...] = (
@@ -237,67 +237,3 @@ class FormatToolBar(QWidget):
         target = self.current()
         if target is not None:
             target.toggle_tag(tag)
-
-
-class RichTextField(QWidget):
-    """``RichTextEdit`` に 4 つの書式ボタンを添えたひとまとまり(設計書 §14-2)。"""
-
-    htmlChanged = Signal(str)
-
-    def __init__(self, parent: QWidget | None = None, *, height: int = 90) -> None:
-        super().__init__(parent)
-        self.edit = RichTextEdit(self)
-        self.edit.setMinimumHeight(height)
-        self.edit.htmlChanged.connect(self.htmlChanged)
-
-        bar = QHBoxLayout()
-        bar.setContentsMargins(0, 0, 0, 0)
-        self.buttons: dict[str, QToolButton] = {}
-        for tag, label, shortcut in FORMAT_BUTTONS:
-            button = QToolButton(self)
-            button.setText(label)
-            button.setToolTip(f"<{tag}>  {shortcut}")
-            button.clicked.connect(lambda _=False, t=tag: self.edit.toggle_tag(t))
-            action = QAction(self)
-            action.setShortcut(QKeySequence(shortcut))
-            action.triggered.connect(lambda _=False, t=tag: self.edit.toggle_tag(t))
-            self.edit.addAction(action)
-            bar.addWidget(button)
-            self.buttons[tag] = button
-        bar.addStretch(1)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addLayout(bar)
-        layout.addWidget(self.edit)
-
-    def fragment_html(self) -> str:
-        return self.edit.fragment_html()
-
-    def set_fragment_html(self, html: str) -> None:
-        self.edit.set_fragment_html(html)
-
-
-class KintouPreview(QLabel):
-    """均等割の印字プレビュー(設計書 §14-2, §7)。
-
-    保存形は空白を持たないが、冊子には ``横　紋`` と全角空白を挟んで印字される。
-    編集中にどう印字されるかを併記しないと、この差が見えない。
-    """
-
-    def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setTextFormat(Qt.TextFormat.RichText)
-        self.setWordWrap(True)
-
-    def show_choices(
-        self, choice_htmls: list[str], overrides: list[str | None] | None = None
-    ) -> None:
-        overrides = list(overrides or [])
-        overrides += [None] * (len(choice_htmls) - len(overrides))
-        lines = []
-        for label, html, override in zip("abcde", choice_htmls, overrides, strict=False):
-            printed = render_choice(html, override)
-            mark = " ←均等割" if printed != html else ""
-            lines.append(f"{label}　{printed}{mark}")
-        self.setText("印字プレビュー<br>" + "<br>".join(lines) if lines else "印字プレビュー")

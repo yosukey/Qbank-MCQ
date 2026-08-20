@@ -29,9 +29,9 @@ from PySide6.QtWidgets import (
 )
 
 from ..core.choiceset import ordered_items
-from ..core.db import ChoiceSet, Question
+from ..core.db import ChoiceSet
 from ..core.reporting import Appearance, QuestionHistory, question_history
-from ..core.typing_rules import LABELS, REQUIRED_COUNT, derive_item_type_detail, is_negative
+from ..core.typing_rules import REQUIRED_COUNT, derive_item_type_detail, is_negative
 from .charts import ChartCanvas
 from .common import number, p_with_type, plain, rate, rich_label
 
@@ -238,20 +238,3 @@ class QuestionDetail(QDialog):
     def _request_revision(self) -> None:
         self.reviseRequested.emit(self.question_id)
         self.accept()
-
-
-def format_correct_marks(version, choice_set: ChoiceSet) -> list[str]:
-    """印字順に「正答かどうか」を並べた表示用の記号列(一覧のツールチップ用)。"""
-    printed = ordered_items(choice_set.items_by_no(), version.choice_order)
-    return [
-        f"{'✔' if label in version.correct else '　'}{label}"
-        for label, _, _ in printed
-        if label in LABELS
-    ]
-
-
-def question_title(session, question_id: int) -> str:
-    """ウィンドウ見出し用の短い説明。"""
-    question = session.get(Question, question_id)
-    version = question.latest_version if question else None
-    return plain(version.stem_html)[:40] if version else f"問題 {question_id}"
