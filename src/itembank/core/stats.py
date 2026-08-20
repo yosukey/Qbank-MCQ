@@ -20,8 +20,20 @@ from .typing_rules import LABELS, REQUIRED_COUNT, TYPE_XX, normalize_correct
 #: 無回答は ``pattern=''`` で表す(設計書 §8 の ``item_pattern_counts`` 注記)。
 BLANK = ""
 
-#: 集計 CSV での無回答列の見出し(設計書 §10.2)。
+#: 分類できない解答(実物の集計 CSV の ``その他`` 列)。
+#:
+#: 設計書 §10.2 は 31 パターン + 空白の 32 列しか想定していなかったが、実際に
+#: 届く集計 CSV には ``その他`` 列がある。**受験者は必ずどれか 1 列に数えられる**
+#: ので、これを N から外すと受験者数と正答率がずれる。31 パターンのどれでもない
+#: 区分として別のキーで持ち、度数合計には入れる。
+OTHER = "?"
+
+#: 集計 CSV での無回答列の見出し。方言による違いは ``io.csv_stats`` が吸収する。
 BLANK_COLUMN = "空白"
+OTHER_COLUMN = "その他"
+
+#: 31 パターンのどちらでもない特別なキー。
+NON_PATTERN_KEYS: frozenset[str] = frozenset({BLANK, OTHER})
 
 
 def all_patterns() -> tuple[str, ...]:
@@ -84,6 +96,8 @@ class ItemStats:
     top_wrong_pattern: str | None
     top_wrong_count: int
     partial: dict[int, int]
+    #: 分類できない解答の割合(集計 CSV の ``その他``)。列が無い方言では 0。
+    other_rate: float = 0.0
     disc: float | None = None
     disc_type: str | None = None
     flags: list[str] = field(default_factory=list)
@@ -99,7 +113,7 @@ class ItemStats:
 
 
 def _validate_counts(counts: Mapping[str, int]) -> None:
-    unknown = sorted(set(counts) - PATTERN_SET - {BLANK})
+    unknown = sorted(set(counts) - PATTERN_SET - NON_PATTERN_KEYS)
     if unknown:
         raise ValueError(f"未知のパターンです: {unknown}")
     bad = sorted(k for k, v in counts.items() if not isinstance(v, int) or v < 0)
@@ -137,7 +151,10 @@ def derive_item_stats(
     # 設計書 §12 / 実装計画 §11: 正答率は CSV の丸め値ではなく必ず再計算する。
     p = n_correct / n
     blank_rate = counts.get(BLANK, 0) / n
+    other_rate = counts.get(OTHER, 0) / n
 
+    # 周辺マーク率。BLANK は空文字、OTHER は "?" なのでどちらも印字記号を含まず、
+    # この内包表記から自然に外れる。
     sel = {
         label: sum(c for pat, c in counts.items() if pat and label in pat) / n for label in LABELS
     }
@@ -166,10 +183,12 @@ def derive_item_stats(
         # 設計書 §12: XX では算出しない(任意個数を取るため違反が定義できない)。
         need = REQUIRED_COUNT.get(item_type)
         if need is not None:
+            # OTHER は必ず除く。"?" の長さ 1 は「1 つ選んだ」という意味を持たないので、
+            # 指示個数と比べると need によって違反になったりならなかったりしてしまう。
             violating = sum(
                 c
                 for pat, c in counts.items()
-                if (pat != BLANK or overselect_includes_blank) and len(pat) != need
+                if pat != OTHER and (pat != BLANK or overselect_includes_blank) and len(pat) != need
             )
             overselect_rate = violating / n
 
@@ -185,6 +204,7 @@ def derive_item_stats(
         top_wrong_pattern=top_wrong_pattern,
         top_wrong_count=top_wrong_count,
         partial=partial,
+        other_rate=other_rate,
         disc=disc,
         disc_type=disc_type,
     )

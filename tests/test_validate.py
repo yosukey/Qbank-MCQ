@@ -11,7 +11,7 @@ from dataclasses import dataclass, field
 import pytest
 
 from designdata import DESIGN_Q1_VALUES, counts_from_row
-from itembank.core.stats import BLANK, PATTERNS
+from itembank.core.stats import BLANK, OTHER, PATTERNS
 from itembank.core.validate import (
     ExamItemView,
     ExamLimits,
@@ -21,7 +21,8 @@ from itembank.core.validate import (
     validate_stats_import,
 )
 
-ALL_COLUMNS = [*PATTERNS, "空白"]
+#: io.csv_stats が正規化したあとの度数列キー。無回答は表記ゆれを BLANK に寄せてある。
+ALL_COLUMNS = [*PATTERNS, BLANK]
 
 
 @dataclass
@@ -164,7 +165,7 @@ def test_7_unreadable_cells_are_reported() -> None:
 
 
 def test_8_pattern_columns_must_be_exactly_31_plus_blank() -> None:
-    missing = [c for c in ALL_COLUMNS if c != "空白"]
+    missing = [c for c in ALL_COLUMNS if c != BLANK]
     issues = validate_stats_import(
         [make_row()], {1: "ad"}, pattern_columns_found=missing, n_examinees=139
     )
@@ -176,6 +177,23 @@ def test_8_unknown_pattern_columns_are_blocked() -> None:
         [make_row()], {1: "ad"}, pattern_columns_found=[*ALL_COLUMNS, "abcdef"], n_examinees=139
     )
     assert "pattern_columns_extra" in blocking_codes(issues)
+
+
+def test_8_the_other_column_is_optional() -> None:
+    """``その他`` は方言による追加列。あってもなくても通す。"""
+    issues = validate_stats_import(
+        [make_row()], {1: "ad"}, pattern_columns_found=[*ALL_COLUMNS, OTHER], n_examinees=139
+    )
+    assert "pattern_columns_extra" not in codes(issues)
+    assert blocking_codes(issues) == set()
+
+
+def test_8_two_columns_for_the_same_bucket_are_blocked() -> None:
+    """``空白`` と ``無解答`` が両方あると、どちらを採るかで受験者数が変わる。"""
+    issues = validate_stats_import(
+        [make_row()], {1: "ad"}, pattern_columns_found=[*ALL_COLUMNS, BLANK], n_examinees=139
+    )
+    assert "pattern_columns_duplicate" in blocking_codes(issues)
 
 
 def test_9_row_count_must_equal_the_number_of_questions() -> None:

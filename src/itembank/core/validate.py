@@ -16,7 +16,7 @@ from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Protocol
 
-from .stats import PATTERNS, is_disc_on_grid
+from .stats import BLANK, BLANK_COLUMN, OTHER, OTHER_COLUMN, PATTERNS, is_disc_on_grid
 from .typing_rules import (
     REQUIRED_COUNT,
     TYPE_XX,
@@ -61,6 +61,11 @@ class StatsRowLike(Protocol):
     def has_negative(self) -> bool: ...
 
 
+def _adjusted(row: object) -> bool:
+    """措置が入っているか。``is_adjusted`` を持たない行(テストの代役など)は素とみなす。"""
+    return bool(getattr(row, "is_adjusted", False))
+
+
 def validate_stats_import(
     rows: Sequence[StatsRowLike],
     exam_items: Mapping[int, str],
@@ -68,12 +73,16 @@ def validate_stats_import(
     pattern_columns_found: Sequence[str] = (),
     missing_fixed_columns: Sequence[str] = (),
     n_examinees: int | None = None,
+    n_non_mcq: int = 0,
 ) -> list[ValidationIssue]:
     """設計書 §9.2 の 9 項目を順に見る。
 
     ``exam_items`` は ``position -> correct_asked``。finalize 済みの試験には既に
     「どの版を何番として出したか」が記録されているので、CSV は統計を与えるだけでよい
     (設計書 §1.2)。
+
+    ``rows`` には**選択式の行だけ**を渡す。記述式などはバンクの対象外なので、
+    件数を ``n_non_mcq`` で受け取って報告するに留める。
     """
     issues: list[ValidationIssue] = []
 
@@ -81,6 +90,16 @@ def validate_stats_import(
         issues.append(
             _issue(
                 "csv_missing_columns", f"必須列が欠けています: {', '.join(missing_fixed_columns)}"
+            )
+        )
+
+    if n_non_mcq:
+        issues.append(
+            _issue(
+                "non_mcq_skipped",
+                f"選択式でない設問 {n_non_mcq} 問(記述式など)は統計の対象外として飛ばします",
+                False,
+                count=n_non_mcq,
             )
         )
 
@@ -147,7 +166,22 @@ def validate_stats_import(
     n = distinct[0] if len(distinct) == 1 else None
 
     # --- 2. 度数合計 = メタ行の受験者数 ------------------------------------
-    if n is not None and n_examinees is not None and int(n) != int(n_examinees):
+    if n_examinees is None:
+        # 実物の集計 CSV にはメタ行が無い。突き合わせ相手がいないことを黙って
+        # 済ませず、受験者数は度数合計から導いたのだと明示する。
+        issues.append(
+            _issue(
+                "n_not_declared",
+                (
+                    f"受験者数の記載がありません。度数合計から {int(n)} 人として扱います"
+                    if n is not None
+                    else "受験者数の記載がなく、度数合計も設問ごとに揃っていません"
+                ),
+                False,
+                total=int(n) if n is not None else None,
+            )
+        )
+    elif n is not None and int(n) != int(n_examinees):
         issues.append(
             _issue(
                 "n_mismatch",
@@ -159,6 +193,19 @@ def validate_stats_import(
 
     for row in rows:
         expected_correct = exam_items.get(row.position)
+
+        # 措置(全員正解にした等)が入っていると素の成績ではなくなる。
+        # 何が起きたかは CSV から分からないので、止めずに気づかせる。
+        if _adjusted(row):
+            issues.append(
+                _issue(
+                    "adjusted_item",
+                    f"問{row.position}: 措置 '{row.adjustment}' が入っています。"
+                    "統計の解釈に注意してください",
+                    False,
+                    position=row.position,
+                )
+            )
 
         # --- 5. CSV の正答肢 = exam_items.correct_asked --------------------
         if expected_correct is None:
@@ -221,21 +268,54 @@ def validate_stats_import(
     return issues
 
 
+def _display(key: str) -> str:
+    """正規化した度数列キーを、人に見せる名前に戻す。"""
+    if key == BLANK:
+        return BLANK_COLUMN
+    if key == OTHER:
+        return OTHER_COLUMN
+    return key
+
+
 def _check_pattern_columns(found: Sequence[str]) -> list[ValidationIssue]:
+    """度数列が 31 パターン + 無回答 と過不足なく一致するか(設計書 §9.2-8)。
+
+    ``found`` は ``io.csv_stats`` が正規化したキー。無回答は ``空白`` / ``無解答``
+    のどちらで書かれていても ``BLANK`` に寄せられている。``その他`` は方言による
+    追加列なので、あってもなくてもよい。
+    """
     if not found:
         return []
-    expected = {*PATTERNS, "空白"}
+    required = {*PATTERNS, BLANK}
+    optional = {OTHER}
     got = set(found)
-    missing = sorted(expected - got, key=lambda c: (c != "空白", c))
-    extra = sorted(got - expected)
+    missing = sorted(required - got, key=lambda c: (c != BLANK, c))
+    extra = sorted(got - required - optional)
+
     issues: list[ValidationIssue] = []
     if missing:
         issues.append(
-            _issue("pattern_columns_missing", f"度数列が足りません: {', '.join(missing)}")
+            _issue(
+                "pattern_columns_missing",
+                f"度数列が足りません: {', '.join(_display(c) for c in missing)}",
+            )
         )
     if extra:
         issues.append(
-            _issue("pattern_columns_extra", f"知らない度数列があります: {', '.join(extra)}")
+            _issue(
+                "pattern_columns_extra",
+                f"知らない度数列があります: {', '.join(_display(c) for c in extra)}",
+            )
+        )
+    if len(found) != len(got):
+        # 「空白」と「無解答」が両方あるなど、同じ区分に寄る列が 2 つある。
+        # どちらを採るかで受験者数が変わるので取り込ませない。
+        duplicated = sorted({_display(c) for c in found if list(found).count(c) > 1})
+        issues.append(
+            _issue(
+                "pattern_columns_duplicate",
+                f"同じ区分に対応する度数列が重複しています: {', '.join(duplicated)}",
+            )
         )
     if len(found) != len(got):
         issues.append(_issue("pattern_columns_duplicate", "度数列名が重複しています"))

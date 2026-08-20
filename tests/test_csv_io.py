@@ -16,7 +16,7 @@ from designdata import (
     DESIGN_Q1_P,
     DESIGN_Q1_VALUES,
 )
-from itembank.core.stats import BLANK, PATTERNS
+from itembank.core.stats import BLANK, OTHER, PATTERNS
 from itembank.io.csv_key import (
     AnswerKeyRow,
     answer_key_filename,
@@ -96,8 +96,22 @@ def test_blank_column_maps_to_the_empty_pattern(tmp_path: Path) -> None:
 
 def test_header_columns_are_reported_for_validation(design_csv: Path) -> None:
     parsed = parse_stats_csv(design_csv)
-    assert parsed.pattern_columns_found == [*PATTERNS, "空白"]
+    assert parsed.pattern_columns_found == [*PATTERNS, BLANK]
     assert parsed.missing_fixed_columns == []
+
+
+def test_alternate_blank_and_other_column_names(tmp_path: Path) -> None:
+    """実物の方言は ``無解答`` と ``その他``。同じ区分に正規化される。"""
+    path = tmp_path / "ssdb.csv"
+    with path.open("w", encoding="utf-8-sig", newline="") as fh:
+        writer = csv.writer(fh, lineterminator="\r\n")
+        writer.writerow(["問", "正答", "正答率(%)", "識別係数", *PATTERNS, "無解答", "その他"])
+        writer.writerow([1, "ad", 80.58, 0.529, *DESIGN_Q1_VALUES, 0])
+
+    parsed = parse_stats_csv(path)
+    assert parsed.pattern_columns_found == [*PATTERNS, BLANK, OTHER]
+    assert parsed.percent_scale is True
+    assert parsed.rows[0].p_reported == pytest.approx(0.8058)
 
 
 def test_missing_fixed_column_is_reported(tmp_path: Path) -> None:

@@ -112,7 +112,7 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 | §7 均等割 | `core/text.py` `normalize_choice` / `render_choice` | `test_text.py` |
 | §8 スキーマ | `core/db.py` | `test_migrate.py` |
 | §9.2 検証チェーン 9 項目 | `core/validate.py` `validate_stats_import` | `test_validate.py` |
-| §10 連携仕様(BOM + CRLF) | `io/csv_key.py`, `io/csv_stats.py` | `test_csv_io.py` |
+| §10 連携仕様(BOM + CRLF) | `io/csv_key.py`, `io/csv_stats.py` | `test_csv_io.py`, `test_csv_real.py` |
 | §11 問題タイプ | `core/typing_rules.py` | `test_typing_rules.py` |
 | §12 導出指標と自動フラグ | `core/stats.py` | `test_stats.py` |
 | §13.1 選定条件 | `core/selection.py` | `test_selection.py` |
@@ -183,6 +183,26 @@ python tools/update_golden.py --check testdata/exam_2025.docx
 
 なお `.gitignore` は `*.sqlite` を除外している。`testdata/legacy/` の旧 DB を
 コミットするときは `git add -f` が要る。
+
+## 設計書と実物が食い違っている点
+
+設計書 §10.2 は集計 CSV の書式を規定しているが、**採点システムが実際に出す形は
+これと違う**(`testdata/item_stats_2026_02.csv` で確認)。アプリ側は両方を読む
+`io/csv_stats.py` の別名表で吸収してあるが、設計書自体は未改訂。
+
+| 設計書 §10.2 | 実物 | アプリの扱い |
+|---|---|---|
+| `#試験名`〜`#受験者数` のメタ行 | 無い | 受験者数を度数合計から導出し、そのことを警告で明示 |
+| `正答率` は 0〜1 | `正答率(%)` で 0〜100 | 見出しの `(%)` を見て換算 |
+| `正答数` 列 | 無い | 正答パターン列から数える |
+| `空白` | `無解答` | 別名として同一視 |
+| — | `その他` | 31 パターンでも無回答でもない区分として N に算入 |
+| 全問が 5 肢選択 | **30 問中 24 問が記述式** | 選択式でない行は統計の対象外。件数を報告 |
+| — | `配点` `措置` `点双列相関` | 読むが保存しない。`措置` が `none` 以外なら警告 |
+
+記述式をバンクに登録する経路は設けていない(選択肢セットと問題タイプが
+5 肢選択を前提にしているため)。試験の記録としても残していないので、
+**出題番号 7〜30 はアプリ側の試験には現れない。**
 
 ## 未着手
 

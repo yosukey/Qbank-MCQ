@@ -183,7 +183,13 @@ def cmd_import_exam(args: argparse.Namespace) -> int:
         except StatsFormatError as exc:
             print(f"[ブロック] {exc}", file=sys.stderr)
             return EXIT_VALIDATION
-        print(f"集計CSV: {stats_file.n_rows} 行、受験者数 {stats_file.meta.n_examinees}")
+        print(
+            f"集計CSV[{stats_file.dialect}]: 選択式 {stats_file.n_rows} 行"
+            f"、受験者数 {stats_file.meta.effective_n}"
+        )
+        if stats_file.non_mcq_rows:
+            positions = ", ".join(str(r.position) for r in stats_file.non_mcq_rows)
+            print(f"  選択式でない設問 {len(stats_file.non_mcq_rows)} 問を除外: 問{positions}")
 
     issues = list(parsed.issues)
     if stats_file is not None:
@@ -294,6 +300,7 @@ def _do_import_exam(session: Session, args, parsed, stats_file) -> int:
             pattern_columns_found=stats_file.pattern_columns_found,
             missing_fixed_columns=stats_file.missing_fixed_columns,
             n_examinees=stats_file.meta.n_examinees,
+            n_non_mcq=len(stats_file.non_mcq_rows),
         )
         n_block, _ = _print_issues(issues)
         if n_block and not args.force:
@@ -305,7 +312,7 @@ def _do_import_exam(session: Session, args, parsed, stats_file) -> int:
             stats_file.rows,
             source_file=str(args.stats),
             disc_type=stats_file.meta.disc_type,
-            n_examinees=stats_file.meta.n_examinees,
+            n_examinees=stats_file.meta.effective_n,
         )
         print(f"統計を {result.written} 問に取り込みました")
         _print_flags(session, exam)
@@ -356,6 +363,7 @@ def cmd_import_stats(args: argparse.Namespace) -> int:
             pattern_columns_found=stats_file.pattern_columns_found,
             missing_fixed_columns=stats_file.missing_fixed_columns,
             n_examinees=stats_file.meta.n_examinees,
+            n_non_mcq=len(stats_file.non_mcq_rows),
         )
         n_block, n_warn = _print_issues(issues)
         print(f"検証チェーン: ブロック {n_block} 件、警告 {n_warn} 件")
@@ -372,7 +380,7 @@ def cmd_import_stats(args: argparse.Namespace) -> int:
             stats_file.rows,
             source_file=str(args.csv),
             disc_type=stats_file.meta.disc_type,
-            n_examinees=stats_file.meta.n_examinees,
+            n_examinees=stats_file.meta.effective_n,
         )
         print(f"統計を {result.written} 問に取り込みました(status={exam.status})")
         _print_flags(session, exam)
