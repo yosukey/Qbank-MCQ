@@ -95,6 +95,35 @@ def backup_database(db_file: Path, *, dest_dir: Path | None = None) -> Path | No
     return dest
 
 
+def restore_database(backup_file: Path, db_file: Path) -> Path | None:
+    """バックアップを書き戻す(設計書 §14-10 の「復元」)。
+
+    **書き戻す前に、いま入っている DB の控えを取る。** 復元先を選び間違えたときに
+    取り返しがつかなくなるのを防ぐ。戻り値はその控えのパス(元 DB が無ければ None)。
+
+    呼ぶ前にエンジンを ``dispose()`` しておくこと。SQLite はファイルを開いたまま
+    差し替えると、開きっぱなしの接続が古い内容を見続ける。
+    """
+    if not backup_file.exists():
+        raise FileNotFoundError(f"バックアップがありません: {backup_file}")
+    if backup_file.resolve() == db_file.resolve():
+        raise ValueError("復元元と復元先が同じファイルです")
+
+    previous = backup_database(db_file)
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(backup_file, db_file)
+    log.warning("バックアップを復元しました: %s → %s", backup_file, db_file)
+    return previous
+
+
+def list_backups(dest_dir: Path | None = None) -> list[Path]:
+    """新しい順のバックアップ一覧(復元ダイアログの初期表示に使う)。"""
+    d = dest_dir or paths.backup_dir()
+    if not d.exists():
+        return []
+    return sorted(d.glob("*.sqlite"), key=lambda p: p.name, reverse=True)
+
+
 @dataclass
 class MigrationResult:
     from_version: int

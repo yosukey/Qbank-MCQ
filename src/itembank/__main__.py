@@ -521,6 +521,13 @@ def cmd_finalize(args: argparse.Namespace) -> int:
     return EXIT_OK
 
 
+def cmd_gui(args: argparse.Namespace) -> int:
+    """GUI を起こす(設計書 §14)。PySide6 が無ければ導入方法を出して終える。"""
+    from .app import main as gui_main
+
+    return gui_main([sys.argv[0]], db_file=Path(args.db) if args.db else None)
+
+
 def cmd_export(args: argparse.Namespace) -> int:
     session, _ = _open(args)
     out_dir = Path(args.out) if args.out else paths.exports_dir()
@@ -655,6 +662,9 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p_export.add_argument("--out", help="出力先ディレクトリ")
     p_export.set_defaults(func=cmd_export)
+
+    p_gui = sub.add_parser("gui", help="画面を開く(設計書 §14)")
+    p_gui.set_defaults(func=cmd_gui)
 
     return parser
 

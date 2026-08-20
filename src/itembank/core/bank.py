@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import choiceset as cs
@@ -128,6 +128,20 @@ def refresh_links_for(
         created.append(link)
     session.flush()
     return created
+
+
+def rebuild_all_links(session: Session, *, min_shared: int = 3) -> int:
+    """全セットの近似リンクを張り直す。設定画面で閾値を変えたときに呼ぶ(設計書 §14-10)。
+
+    閾値を上げても古いリンクが残ると、露出管理(§6.4-1)が実際より厳しく効き続ける。
+    そこで**いったん全消ししてから**張り直す。
+    """
+    session.query(ChoiceSetLink).delete()
+    session.flush()
+    sets = session.scalars(select(ChoiceSet)).all()
+    for target in sets:
+        refresh_links_for(session, target, min_shared=min_shared)
+    return session.query(ChoiceSetLink).count()
 
 
 def linked_set_ids(session: Session, set_id: int) -> set[int]:
@@ -479,3 +493,51 @@ def tag_names(session: Session, question_id: int) -> list[str]:
         .where(QuestionTag.question_id == question_id)
     ).all()
     return sorted(r[0] for r in rows)
+
+
+def tag_usage(session: Session) -> list[tuple[Tag, int]]:
+    """``(タグ, 付いている問題数)`` の一覧。設定画面のタグ管理が使う(設計書 §14-10)。"""
+    counts = dict(
+        session.execute(select(QuestionTag.tag_id, func.count()).group_by(QuestionTag.tag_id)).all()
+    )
+    tags = session.scalars(select(Tag).order_by(Tag.name)).all()
+    return [(t, int(counts.get(t.id, 0))) for t in tags]
+
+
+def rename_tag(session: Session, tag: Tag, new_name: str) -> Tag:
+    """タグの名前を変える。**同名のタグがあれば統合する**(付け替えてから消す)。"""
+    name = new_name.strip()
+    if not name:
+        raise ValueError("タグ名が空です")
+    if name == tag.name:
+        return tag
+
+    existing = session.scalar(select(Tag).where(Tag.name == name))
+    if existing is None:
+        tag.name = name
+        session.flush()
+        return tag
+
+    # 統合。両方に付いている問題で主キーが衝突しないよう、先に重複を除く。
+    already = {
+        r[0]
+        for r in session.execute(
+            select(QuestionTag.question_id).where(QuestionTag.tag_id == existing.id)
+        ).all()
+    }
+    for link in session.scalars(select(QuestionTag).where(QuestionTag.tag_id == tag.id)).all():
+        if link.question_id in already:
+            session.delete(link)
+        else:
+            link.tag_id = existing.id
+    session.flush()
+    delete_tag(session, tag)
+    return existing
+
+
+def delete_tag(session: Session, tag: Tag) -> None:
+    """タグを消す。問題との結び付きも消える(問題自体は残る)。"""
+    session.query(QuestionTag).filter(QuestionTag.tag_id == tag.id).delete()
+    session.query(Tag).filter(Tag.parent_id == tag.id).update({Tag.parent_id: None})
+    session.delete(tag)
+    session.flush()
