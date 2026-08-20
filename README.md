@@ -5,11 +5,11 @@
 基づく実装。
 
 実装計画 §0 の開発方針どおり、**ロジック層を先に作り、GUI は後**。各機能はまず CLI
-サブコマンドとして動く。
+サブコマンドとして動き、画面はそれと同じ関数を呼ぶ。
 
 ## いまできること
 
-`itembank` の CLI で、設計書 §1 の運用サイクルが**一周する**。
+CLI でも画面でも、設計書 §1 の運用サイクルが**一周する**。
 
 ```
 過去問docx ─┐
@@ -29,9 +29,13 @@
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev,gui]"   # GUI が要らなければ ".[dev]" だけでよい
 .venv/bin/pytest -q
 ```
+
+GUI は任意依存である。PySide6 が無い環境では GUI のテストが skip され、CLI だけで
+運用サイクルは一周する(実装計画 §0)。Linux で動かすときは Qt の共有ライブラリ
+(`libegl1` `libgl1` `libxkbcommon0` など)が要る。
 
 サンプルデータ(実データの代わり)を作る:
 
@@ -40,6 +44,31 @@ python3.11 -m venv .venv
 ```
 
 ## 使い方
+
+### 画面(設計書 §14)
+
+```bash
+itembank gui            # または python -m itembank.app
+```
+
+タブは設計書 §14 の番号順。問題編集(§14-2)と問題詳細(§14-3)は一覧から開く
+ダイアログ。
+
+| タブ | 設計書 | 中身 |
+|---|---|---|
+| 問題バンク | §14-1 | フィルタ付き一覧。新規作成・複製作成(派生)・編集・詳細 |
+| 選択肢セット | §14-4 | セット一覧・近似リンク・設問×項目のマーク率・統合・監査 |
+| 選択肢アイテム | §14-5 | 用語単位の実績(§6.5) |
+| 過去問一括取込 | §14-6 | 局面A。書式付きプレビュー → 目視確認 → 一括登録 |
+| 試験セット | §14-7 | 選定 → 差し替え → finalize 前チェック → 確定 |
+| 出力 | §14-8 | 冊子 docx / 正答キー / 照合表 / 統計レポート |
+| 統計取込 | §14-9 | 局面B。試験を選ぶ → 検証チェーン → 確定 → フラグ一覧 |
+| 設定 | §14-10 | タグ・フラグ閾値・近似リンク閾値・基準フォント・否定語・バックアップ |
+
+**局面A(過去問一括取込)と局面B(統計取込)はタブが分かれている。** 取り違えると
+同じ問題が二重登録される(設計書 §1.4)。統計取込のタブには問題を作る導線が無い。
+
+### CLI
 
 ```bash
 itembank db init                       # DB 作成・スキーマ移行
@@ -74,8 +103,10 @@ itembank import-stats --exam 2 --csv 集計.csv
 ```
 src/itembank/
 ├─ __main__.py            CLI エントリ
+├─ app.py                 GUI エントリ
 ├─ core/
 │  ├─ paths.py            %APPDATA% 解決、ログ
+│  ├─ config.py           設定の永続化(設計書 §14-10)
 │  ├─ db.py               SQLAlchemy モデル(設計書 §8)
 │  ├─ migrate.py          スキーマ移行(通し番号方式・自動バックアップ)
 │  ├─ text.py             正規化・均等割・タグ処理          ← 純関数
@@ -84,20 +115,32 @@ src/itembank/
 │  ├─ stats.py            度数からの導出・フラグ判定          ← 純関数
 │  ├─ selection.py        出題候補選定                        ← 純関数
 │  ├─ validate.py         検証チェーン                        ← 純関数
-│  ├─ bank.py             新規作成・改訂・派生の 3 経路
+│  ├─ bank.py             新規作成・改訂・派生の 3 経路、セットの統合
 │  ├─ exam.py             試験の組み立て・finalize・統計付与
-│  └─ reporting.py        レポートの行モデルと層別集計
+│  ├─ importer.py         一括取込の手順(CLI と画面で共用)
+│  └─ reporting.py        レポート・問題履歴・セットの読みモデル
 ├─ io/
 │  ├─ docx_read.py        取込パーサ
 │  ├─ docx_write.py       冊子出力
 │  ├─ csv_stats.py        集計CSV
 │  ├─ csv_key.py          正答キー
 │  └─ xlsx_report.py      レポート・照合表
-└─ ui/                    (未実装 — M4)
+└─ ui/
+   ├─ workspace.py        DB・セッション・設定を画面に配る
+   ├─ richtext.py         HTML 断片 ⇔ QTextDocument、書式ボタン
+   ├─ charts.py           matplotlib の 4 つの図(設計書 §14-3)
+   ├─ common.py           表示の決まりごと(タグ除去・正答率の併記)
+   ├─ main_window.py      タブ
+   ├─ bank_view.py / question_editor.py / question_detail.py
+   ├─ choiceset_view.py / item_view.py
+   └─ import_view.py / exam_builder.py / export_view.py /
+      stats_import.py / settings_view.py
 ```
 
-計画 §5 の一覧に対し `bank.py` `exam.py` `reporting.py` を足してある。改訂/派生の規則や
-finalize の組み立ては GUI から独立して検証できる必要があり、`ui/` に置けないため。
+計画 §5 の一覧に対し `bank.py` `exam.py` `importer.py` `reporting.py` を足してある。
+改訂/派生の規則、finalize の組み立て、一括取込の手順は GUI から独立して検証できる
+必要があり、`ui/` に置けないため。**画面と CLI は同じ関数を呼ぶ。** 手順を両側に
+写すと、片方だけ直したときに登録内容が食い違う。
 
 ## 設計書のどこが、どこで守られているか
 
@@ -118,6 +161,10 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 | §13.1 選定条件 | `core/selection.py` | `test_selection.py` |
 | §13.3 finalize 前チェック | `core/validate.py` `finalize_checks` | `test_validate.py`, `test_exam.py` |
 | §2.2 改訂と派生 | `core/bank.py` | `test_bank.py` |
+| §14 画面構成(10 種) | `ui/` | `test_ui_*.py` |
+| §14-2 保存形式のまま表示・編集 | `ui/richtext.py` | `test_ui_richtext.py` |
+| §14-3 パターンの可視化 | `ui/charts.py` | `test_ui_bank.py` |
+| §1.4 局面の取り違え防止 | `ui/main_window.py`(タブ分離) | `test_ui_workflow.py` |
 
 ## テスト
 
@@ -134,6 +181,12 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 - **往復テスト** — 取込 → 冊子出力 → 再取込で HTML が一致
 - **異常系** — `testdata/sample/broken_*.csv` が確実にブロックされる
 - **統合** — インメモリ SQLite で改訂/派生/finalize/統計取込を通す
+- **画面** — 画面のない環境(`QT_QPA_PLATFORM=offscreen`)でウィジェットを組み立てて
+  操作する。判断の要る部分(絞り込み・保存経路・検証)は純関数か core に寄せてあり、
+  画面のテストは「その関数を正しく呼んでいるか」だけを見る
+
+実装計画 §6 は GUI を手動チェックリストとしているが、offscreen で走るぶんは自動化した。
+費用対効果が合わないのは見た目の確認だけである。
 
 ### 実データを入れるとき
 
@@ -211,10 +264,9 @@ v15 の書式(メタ行つき・`正答率` が 0〜1・`空白` 列)も引き�
 
 | | 内容 | 備考 |
 |---|---|---|
-| **M4** | PySide6 の画面 10 種(設計書 §14) | ロジックはすべて CLI から呼べる形で揃っている |
-| **M6 の一部** | matplotlib による可視化(設計書 §14-3) | 集計値は `core/reporting.py` が算出済み |
 | **M7** | PyInstaller spec / Inno Setup / リリース CI | Windows 実機がないと検証できないため未着手 |
 | **M1 スパイク②** | PyInstaller の実機確認・署名の要否判断 | 同上 |
+| M4 の残り | 画像の差し替え、印刷プレビュー、テンプレート差し替えの画面 | 冊子出力自体は動く |
 
 `.github/workflows/test.yml` は lint とテストのみを回す。実装計画 §8 のリリース
 パイプライン(タグ push → exe + インストーラ)は M7 で足す。

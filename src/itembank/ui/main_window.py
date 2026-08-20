@@ -19,10 +19,14 @@ from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
 from .. import __version__
 from .bank_view import BankView
 from .choiceset_view import ChoiceSetView
+from .exam_builder import ExamBuilderView
+from .export_view import ExportView
+from .import_view import ImportView
 from .item_view import ItemView
 from .question_detail import QuestionDetail
 from .question_editor import QuestionEditor
 from .settings_view import SettingsView
+from .stats_import import StatsImportView
 from .workspace import Workspace
 
 log = logging.getLogger(__name__)
@@ -64,13 +68,32 @@ class MainWindow(QMainWindow):
 
         self.item_view = ItemView(self.workspace, self)
 
+        self.import_view = ImportView(self.workspace, self)
+        self.import_view.imported.connect(lambda _: self.refresh_all())
+
+        self.exam_builder = ExamBuilderView(self.workspace, self)
+        self.exam_builder.examChanged.connect(lambda _: self.refresh_all())
+
+        self.export_view = ExportView(self.workspace, self)
+
+        self.stats_import = StatsImportView(self.workspace, self)
+        self.stats_import.imported.connect(lambda _: self.refresh_all())
+        # 設計書 §2.6: フラグ一覧から改訂へ直接進める。
+        self.stats_import.reviseRequested.connect(lambda qid: self.open_editor(question_id=qid))
+
         self.settings_view = SettingsView(self.workspace, self)
         self.settings_view.settingsChanged.connect(self.refresh_all)
         self.settings_view.databaseRestored.connect(self._reopen)
 
+        # 並びは設計書 §14 の番号順。局面A(過去問一括取込)と局面B(統計取込)を
+        # 別のタブに分けるのが §1.4 の「局面の取り違えを防ぐ仕組み」にあたる。
         self.tabs.addTab(self.bank_view, "問題バンク")
         self.tabs.addTab(self.choiceset_view, "選択肢セット")
         self.tabs.addTab(self.item_view, "選択肢アイテム")
+        self.tabs.addTab(self.import_view, "過去問一括取込")
+        self.tabs.addTab(self.exam_builder, "試験セット")
+        self.tabs.addTab(self.export_view, "出力")
+        self.tabs.addTab(self.stats_import, "統計取込")
         self.tabs.addTab(self.settings_view, "設定")
 
     # -- 問題の編集と詳細(設計書 §14-2, §14-3)-----------------------------

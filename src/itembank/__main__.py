@@ -27,11 +27,6 @@ from sqlalchemy.orm import Session
 
 from . import __version__
 from .core import paths
-from .core.bank import (
-    create_question_from_printed,
-    find_duplicate_question,
-    upsert_choice_set,
-)
 from .core.choiceset import audit_tagless_duplicates
 from .core.db import ChoiceSet, Exam, make_session_factory
 from .core.exam import (
@@ -46,6 +41,7 @@ from .core.exam import (
     selection_context,
     set_exam_items,
 )
+from .core.importer import import_parsed_exam
 from .core.migrate import backup_database, open_database, read_schema_version
 from .core.reporting import crosswalk_rows, report_rows
 from .core.selection import SelectionConditions, select_candidates
@@ -237,91 +233,59 @@ def cmd_import_exam(args: argparse.Namespace) -> int:
 
 
 def _do_import_exam(session: Session, args, parsed, stats_file) -> int:
-    correct_by_position = {r.position: r.correct for r in stats_file.rows} if stats_file else {}
-    meta = stats_file.meta if stats_file else None
+    """取込そのものは ``core.importer`` が行う。ここは結果を人に見せるだけ。
 
-    exam = create_exam(
+    画面(設計書 §14-6)も同じ関数を通る。手順を両側に写すと、片方だけ直したときに
+    登録内容が食い違う。
+    """
+    report = import_parsed_exam(
         session,
-        name=args.name or (meta.exam_name if meta else Path(args.docx).stem),
-        exam_date=args.date or (meta.exam_date if meta else None),
+        parsed,
+        stats_file,
+        name=args.name or Path(args.docx).stem,
+        exam_date=args.date,
         course=args.course,
         cohort=args.cohort,
+        source_file=str(args.stats) if args.stats else "",
+        force=args.force,
     )
 
-    assignments: list[tuple[int, int]] = []
-    duplicates = 0
-    for q in parsed.questions:
-        correct = correct_by_position.get(q.number)
-        if not correct:
-            print(f"問{q.number}: 正答が分からないため下書きとして登録します", file=sys.stderr)
-
-        normalized = [c for c in q.choice_htmls]
-        probe, _ = upsert_choice_set(session, normalized)
-        existing = find_duplicate_question(session, q.stem_html, probe.id)
-        if existing is not None:
+    for entry in report.questions:
+        if entry.status == "draft":
+            print(f"問{entry.number}: 正答が分からないため下書きとして登録します", file=sys.stderr)
+        if entry.duplicate_of is not None:
             # 設計書 §1.4: 署名一致・高類似なら警告して統合を促す。
-            duplicates += 1
             print(
-                f"問{q.number}: 同じセット・同じ設問文の問題 {existing.id} が既にあります。"
-                "統合を検討してください",
+                f"問{entry.number}: 同じセット・同じ設問文の問題 {entry.duplicate_of} が"
+                "既にあります。統合を検討してください",
                 file=sys.stderr,
             )
+        if not entry.registered:
+            _print_issues(entry.issues, prefix=f"問{entry.number}: ")
+            print(f"問{entry.number} を登録できませんでした", file=sys.stderr)
 
-        result, _ = create_question_from_printed(
-            session,
-            stem_html=q.stem_html,
-            printed_choices=normalized,
-            correct=correct or "a",
-            status="active" if correct else "draft",
-            image_path=q.image_paths[0] if q.image_paths else None,
-        )
-        if result.blocked:
-            _print_issues(result.issues, prefix=f"問{q.number}: ")
-            print(f"問{q.number} を登録できませんでした", file=sys.stderr)
-            continue
-        assignments.append((q.number, result.version.id))
-
-    set_exam_items(session, exam, assignments)
-    report = finalize_exam(session, exam)
-    if report.blocked:
-        _print_issues(report.issues)
-        print("finalize できなかったため統計は取り込みません", file=sys.stderr)
+    if report.finalize is not None and report.finalize.blocked:
+        _print_issues(report.finalize.issues)
+        print(report.blocked_reason, file=sys.stderr)
         return EXIT_VALIDATION
 
-    print(f"試験 {exam.id}「{exam.name}」に {len(assignments)} 問を登録しました")
-    if duplicates:
-        print(f"重複の疑い: {duplicates} 件")
+    exam = report.exam
+    print(f"試験 {exam.id}「{exam.name}」に {len(report.registered)} 問を登録しました")
+    if report.duplicates:
+        print(f"重複の疑い: {len(report.duplicates)} 件")
 
     if stats_file is not None:
-        exam_items = {i.position: i.correct_asked for i in exam.items}
-        issues = validate_stats_import(
-            stats_file.rows,
-            exam_items,
-            pattern_columns_found=stats_file.pattern_columns_found,
-            missing_fixed_columns=stats_file.missing_fixed_columns,
-            n_examinees=stats_file.meta.n_examinees,
-            n_non_mcq=len(stats_file.non_mcq_rows),
-        )
-        n_block, _ = _print_issues(issues)
-        if n_block and not args.force:
-            print("統計の検証に失敗したため取り込みませんでした", file=sys.stderr)
+        _print_issues(report.stats_issues)
+        if report.blocked:
+            print(report.blocked_reason, file=sys.stderr)
             return EXIT_VALIDATION
-        result = apply_stats(
-            session,
-            exam,
-            stats_file.rows,
-            source_file=str(args.stats),
-            disc_type=stats_file.meta.disc_type,
-            n_examinees=stats_file.meta.effective_n,
-        )
-        print(f"統計を {result.written} 問に取り込みました")
-        _print_flags(session, exam)
+        print(f"統計を {report.stats_written} 問に取り込みました")
+        _print_flagged(report.flagged)
     return EXIT_OK
 
 
-def _print_flags(session: Session, exam: Exam) -> None:
+def _print_flagged(flagged: Sequence[tuple[int, int, list[str]]]) -> None:
     """取込完了時にフラグの付いた問題を一覧表示する(設計書 §9.3)。"""
-    flagged = flagged_after_import(session, exam)
     if not flagged:
         print("フラグの付いた問題はありません")
         return
@@ -383,7 +347,7 @@ def cmd_import_stats(args: argparse.Namespace) -> int:
             n_examinees=stats_file.meta.effective_n,
         )
         print(f"統計を {result.written} 問に取り込みました(status={exam.status})")
-        _print_flags(session, exam)
+        _print_flagged(flagged_after_import(session, exam))
         session.commit()
     return EXIT_OK
 

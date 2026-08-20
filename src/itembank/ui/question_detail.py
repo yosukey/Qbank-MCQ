@@ -63,8 +63,9 @@ class QuestionDetail(QDialog):
         middle.addWidget(self._build_lineage(), 1)
         layout.addLayout(middle)
 
-        layout.addWidget(self._build_appearances(), 1)
-        layout.addWidget(self._build_charts(), 2)
+        # 図に十分な高さを渡す。表に伸び代を持たせると軸が潰れて何も読めなくなる。
+        layout.addWidget(self._build_appearances(), 0)
+        layout.addWidget(self._build_charts(), 1)
         layout.addWidget(self._build_buttons())
 
     def _build_summary(self) -> QGroupBox:
@@ -95,6 +96,7 @@ class QuestionDetail(QDialog):
         box = QGroupBox("版履歴", self)
         layout = QVBoxLayout(box)
         table = QTableWidget(len(self.history.versions), 4, box)
+        table.setMaximumHeight(150)
         table.setHorizontalHeaderLabels(["版", "正答", "セット", "作成"])
         table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         for row, version in enumerate(self.history.versions):
@@ -144,6 +146,7 @@ class QuestionDetail(QDialog):
         self.appearance_table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
         self.appearance_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.appearance_table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
+        self.appearance_table.setMaximumHeight(160)
 
         item_type = derive_item_type_detail(
             self.history.latest.stem_html if self.history.latest else ""

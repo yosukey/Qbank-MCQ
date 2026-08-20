@@ -51,9 +51,55 @@ def test_main_window_shows_the_database_in_the_status_bar(workspace) -> None:
     assert window.tabs.count() >= 1
 
 
-def test_main_window_refresh_all_touches_every_tab(workspace) -> None:
+def test_main_window_has_every_screen(workspace) -> None:
+    """設計書 §14 の 10 画面。7 と 8 はタブ、2・3 はダイアログで出す。"""
     window = MainWindow(workspace)
+    titles = [window.tabs.tabText(i) for i in range(window.tabs.count())]
+    assert titles == [
+        "問題バンク",
+        "選択肢セット",
+        "選択肢アイテム",
+        "過去問一括取込",
+        "試験セット",
+        "出力",
+        "統計取込",
+        "設定",
+    ]
+
+
+def test_main_window_refresh_all_touches_every_tab(loaded_workspace) -> None:
+    window = MainWindow(loaded_workspace)
     window.refresh_all()  # 例外なく通ること(タブが増えても壊れない)
+
+
+def test_main_window_opens_the_editor_and_the_detail(loaded_workspace) -> None:
+    window = MainWindow(loaded_workspace)
+    question_id = window.bank_view.model.candidate_at(0).question_id
+
+    editor = window.open_editor(question_id=question_id)
+    assert editor.question.id == question_id
+    editor.reject()
+
+    detail = window.open_detail(question_id)
+    assert detail.history.question_id == question_id
+    detail.reject()
+
+    duplicate = window.open_duplicate(question_id)
+    assert duplicate.question is None
+    assert duplicate.derive_source.id == question_id
+    duplicate.reject()
+
+
+def test_show_question_switches_to_the_bank(loaded_workspace) -> None:
+    """フラグ一覧などからバンクの当該行へ飛ぶ導線(設計書 §9.3)。"""
+    window = MainWindow(loaded_workspace)
+    question_id = window.bank_view.model.candidate_at(1).question_id
+
+    window.tabs.setCurrentWidget(window.settings_view)
+    window.show_question(question_id)
+
+    assert window.tabs.currentWidget() is window.bank_view
+    assert window.bank_view.selected_candidate().question_id == question_id
 
 
 def test_main_window_backup(workspace) -> None:

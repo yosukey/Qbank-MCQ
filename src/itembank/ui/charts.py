@@ -68,12 +68,16 @@ def configure_japanese_font() -> str | None:
 class ChartCanvas(FigureCanvasQTAgg):
     """1 枚の図を持つキャンバス。``draw_*`` で中身を差し替える。"""
 
+    #: これより低くすると軸が潰れ、matplotlib が描画を諦める。
+    MINIMUM_HEIGHT = 180
+
     def __init__(self, parent: QWidget | None = None, *, height: float = 2.4) -> None:
         configure_japanese_font()
         self.figure = Figure(figsize=(4.6, height), layout="constrained")
         super().__init__(self.figure)
         self.setParent(parent)
-        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred)
+        self.setMinimumHeight(self.MINIMUM_HEIGHT)
+        self.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
 
     def _axes(self, title: str):
         self.figure.clear()

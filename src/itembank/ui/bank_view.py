@@ -209,7 +209,11 @@ class BankView(QWidget):
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        # 設問の列に余りを全部渡す。他の列は中身に合わせる。既定幅のままだと
+        # 横幅を使い切ってしまい、肝心の設問文が数文字しか見えない。
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.doubleClicked.connect(lambda _: self._emit_for_selection(self.detailRequested))
         layout.addWidget(self.table, 1)
 
