@@ -2,15 +2,15 @@
 
 from __future__ import annotations
 
-from itembank.core.selection import (
+from qbank_mcq.core.selection import (
     Candidate,
     SelectionConditions,
     assign_positions,
     eligible,
     select_candidates,
 )
-from itembank.core.stats import FLAG_NEGATIVE_DISC
-from itembank.core.validate import ExamLimits
+from qbank_mcq.core.stats import FLAG_NEGATIVE_DISC
+from qbank_mcq.core.validate import ExamLimits
 
 A_STEM = "正しいのはどれか。1つ選べ。"
 X2_STEM = "正しいのはどれか。2つ選べ。"

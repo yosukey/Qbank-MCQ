@@ -24,15 +24,15 @@ import pytest
 from docx import Document
 from docx.oxml.ns import qn
 
-from itembank.core.text import normalize_choice, render_choice
-from itembank.io.docx_read import (
+from qbank_mcq.core.text import normalize_choice, render_choice
+from qbank_mcq.io.docx_read import (
     ParsedDocument,
     dump_runs,
     east_asia_font,
     parse_docx,
     summarize_formats,
 )
-from itembank.io.docx_write import (
+from qbank_mcq.io.docx_write import (
     DEFAULT_WRITER_CONFIG,
     BookletItem,
     write_booklet,

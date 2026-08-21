@@ -16,15 +16,15 @@ from designdata import (
     DESIGN_Q1_P,
     DESIGN_Q1_VALUES,
 )
-from itembank.core.stats import BLANK, OTHER, PATTERNS
-from itembank.io.csv_key import (
+from qbank_mcq.core.stats import BLANK, OTHER, PATTERNS
+from qbank_mcq.io.csv_key import (
     AnswerKeyRow,
     answer_key_filename,
     read_answer_key,
     rows_from_exam_items,
     write_answer_key,
 )
-from itembank.io.csv_stats import StatsFormatError, parse_stats_csv
+from qbank_mcq.io.csv_stats import StatsFormatError, parse_stats_csv
 
 HEADER = ["問題", "正答肢", "正答率", "正答数", "識別係数", *PATTERNS, "空白"]
 

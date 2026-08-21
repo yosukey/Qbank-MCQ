@@ -1,14 +1,14 @@
 ; Inno Setup スクリプト(実装計画 §8 / M7-2)。
 ;
-;   ISCC.exe /DAppVersion=0.3.0 /DNumericVersion=0.3.0.0 packaging\itembank.iss
+;   ISCC.exe /DAppVersion=0.3.0 /DNumericVersion=0.3.0.0 packaging\qbank-mcq.iss
 ;
-; 出来上がるのは dist\installer\ItemBank-0.3.0-setup.exe。
+; 出来上がるのは dist\installer\Qbank-MCQ-0.3.0-setup.exe。
 ; **ファイル名にバージョンが入る**ので、Release に並べたときにどれが何版か分かる。
 ;
 ; 方針(実装計画 §8 / 設計書 §15):
 ;   * ユーザー単位インストール。管理者権限を要求しない
-;     (%LOCALAPPDATA%\Programs\ItemBank。exe の置き場は書込不可を前提に扱う)
-;   * **ユーザーデータ(%APPDATA%\ItemBank)には一切触らない**。上書きインストール
+;     (%LOCALAPPDATA%\Programs\Qbank-MCQ。exe の置き場は書込不可を前提に扱う)
+;   * **ユーザーデータ(%APPDATA%\Qbank-MCQ)には一切触らない**。上書きインストール
 ;     でも、アンインストールでも DB・バックアップ・取込原本は残る
 
 #ifndef AppVersion
@@ -18,9 +18,9 @@
   #define NumericVersion "0.0.0.0"
 #endif
 
-#define AppName "ItemBank"
-#define AppExeName "ItemBank.exe"
-#define AppDisplayName "ItemBank(試験問題バンク)"
+#define AppName "Qbank-MCQ"
+#define AppExeName "Qbank-MCQ.exe"
+#define AppDisplayName "Qbank-MCQ(試験問題バンク)"
 
 [Setup]
 ; AppId はアプリの同一性そのもの。**版を上げても変えない**
@@ -68,5 +68,5 @@ Name: "{autodesktop}\{#AppDisplayName}"; Filename: "{app}\{#AppExeName}"; Tasks:
 Filename: "{app}\{#AppExeName}"; Description: "{cm:LaunchProgram,{#AppDisplayName}}"; Flags: nowait postinstall skipifsilent
 
 ; [UninstallDelete] は置かない。{app} 配下しか消さないので、
-; %APPDATA%\ItemBank のデータは上書きインストールでもアンインストールでも残る
+; %APPDATA%\Qbank-MCQ のデータは上書きインストールでもアンインストールでも残る
 ; (実装計画 §4 M7 受入条件「上書きインストールしてもデータが保持され、移行が走る」)。

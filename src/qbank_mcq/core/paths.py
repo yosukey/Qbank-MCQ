@@ -2,12 +2,12 @@
 
 設計書 §15 / 実装計画 §11 より:
 
-- exe は ``%LOCALAPPDATA%\\Programs\\ItemBank`` に入るが、そこは書込不可を前提とする
-- **ユーザーデータは ``%APPDATA%\\ItemBank\\``**(DB・バックアップ・テンプレート・
+- exe は ``%LOCALAPPDATA%\\Programs\\Qbank-MCQ`` に入るが、そこは書込不可を前提とする
+- **ユーザーデータは ``%APPDATA%\\Qbank-MCQ\\``**(DB・バックアップ・テンプレート・
   取込原本・ログ)。exe と同居させない
 
 開発は Windows 以外でも行うため、Windows 以外では XDG 準拠の場所にフォールバックする。
-``ITEMBANK_DATA_DIR`` 環境変数があれば常にそれを優先する(テストで使う)。
+``QBANK_MCQ_DATA_DIR`` 環境変数があれば常にそれを優先する(テストで使う)。
 """
 
 from __future__ import annotations
@@ -18,10 +18,10 @@ import os
 import sys
 from pathlib import Path
 
-APP_NAME = "ItemBank"
-ENV_DATA_DIR = "ITEMBANK_DATA_DIR"
+APP_NAME = "Qbank-MCQ"
+ENV_DATA_DIR = "QBANK_MCQ_DATA_DIR"
 
-DB_FILENAME = "itembank.sqlite"
+DB_FILENAME = "qbank_mcq.sqlite"
 
 
 def data_dir() -> Path:
@@ -82,12 +82,12 @@ _LOG_CONFIGURED = False
 
 
 def setup_logging(level: int = logging.INFO, *, to_console: bool = True) -> Path:
-    """``logs/itembank.log`` へのローテーティングログを設定し、そのパスを返す。
+    """``logs/qbank_mcq.log`` へのローテーティングログを設定し、そのパスを返す。
 
     二重呼び出しはハンドラを増やさない。
     """
     global _LOG_CONFIGURED
-    path = log_dir() / "itembank.log"
+    path = log_dir() / "qbank_mcq.log"
     if _LOG_CONFIGURED:
         return path
 

@@ -5,9 +5,9 @@
 ``VERSION`` をタグの値に書き換えてから exe とインストーラを作る。これで
 
 - アプリウィンドウのタイトルと「情報」欄(``ui/about.py``)
-- インストーラのファイル名(``ItemBank-0.3.0-setup.exe``)
+- インストーラのファイル名(``Qbank-MCQ-0.3.0-setup.exe``)
 - exe / インストーラの Windows ファイルプロパティ
-- ``itembank --version``
+- ``qbank --version``
 
 がすべて同じ値になる。リポジトリに置いてある値は開発中の暫定値なので、タグを打つ
 たびにコミットし直す必要はない。
@@ -66,5 +66,5 @@ def numeric_version(version: str) -> str:
 
 
 def installer_filename(version: str | None = None) -> str:
-    """インストーラのファイル名(実装計画 §8 の ``ItemBank-0.3.0-setup.exe``)。"""
+    """インストーラのファイル名(実装計画 §8 の ``Qbank-MCQ-0.3.0-setup.exe``)。"""
     return f"{APP_NAME}-{version or VERSION}-setup.exe"

@@ -19,8 +19,8 @@ from pathlib import Path
 
 import pytest
 
-from itembank.__main__ import main
-from itembank.io.docx_read import parse_docx
+from qbank_mcq.__main__ import main
+from qbank_mcq.io.docx_read import parse_docx
 
 TESTDATA = Path(__file__).parent.parent / "testdata"
 SAMPLE = TESTDATA / "sample"

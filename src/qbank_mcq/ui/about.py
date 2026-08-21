@@ -1,7 +1,7 @@
 """ウィンドウに出す文言。Qt に依存しない。
 
 バージョンの表示はリリースの受入条件そのもの(実装計画 §8: タグ ``v0.3.0`` で
-作った配布物は ``ItemBank-0.3.0-setup.exe`` になり、起動した窓にも ``0.3.0`` が
+作った配布物は ``Qbank-MCQ-0.3.0-setup.exe`` になり、起動した窓にも ``0.3.0`` が
 出る)なので、Qt なしでテストできるようここに切り出してある。
 """
 
@@ -15,7 +15,7 @@ from ..version import VERSION
 
 
 def window_title(version: str | None = None) -> str:
-    """メインウィンドウのタイトル。``ItemBank 0.3.0``。"""
+    """メインウィンドウのタイトル。``Qbank-MCQ 0.3.0``。"""
     return f"{APP_NAME} {version or VERSION}"
 
 

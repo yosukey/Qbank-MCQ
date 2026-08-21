@@ -9,8 +9,8 @@ import pytest
 from sqlalchemy.orm import Session
 
 from designdata import DESIGN_Q1_VALUES, counts_from_row
-from itembank.core.db import make_engine, make_session_factory
-from itembank.core.migrate import ensure_schema
+from qbank_mcq.core.db import make_engine, make_session_factory
+from qbank_mcq.core.migrate import ensure_schema
 
 TESTDATA = Path(__file__).parent.parent / "testdata"
 
@@ -19,7 +19,7 @@ TESTDATA = Path(__file__).parent.parent / "testdata"
 def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
     """``%APPDATA%`` 相当を一時ディレクトリに逃がし、開発機を汚さない。"""
     d = tmp_path / "appdata"
-    monkeypatch.setenv("ITEMBANK_DATA_DIR", str(d))
+    monkeypatch.setenv("QBANK_MCQ_DATA_DIR", str(d))
     return d
 
 

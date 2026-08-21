@@ -3,14 +3,14 @@
 実装計画 §0 の方針「**CLI を常に併走させる**」に対応する。各機能はまず CLI
 サブコマンドとして動かす。自動テストが書きやすく、GUI 不調時の回避手段にもなる。
 
-    itembank db init | db migrate | db backup
-    itembank inspect-docx FILE            # スパイク①: 全 run の書式ダンプ
-    itembank import-exam --docx X --stats Y [--dry-run]
-    itembank import-stats --exam ID --csv Y [--dry-run]
-    itembank exams | bank | audit-sets
-    itembank select --total 50 [--type A=30 --type X2=15]
-    itembank finalize --exam ID
-    itembank export --exam ID --what key|booklet|crosswalk|report|all
+    qbank db init | db migrate | db backup
+    qbank inspect-docx FILE            # スパイク①: 全 run の書式ダンプ
+    qbank import-exam --docx X --stats Y [--dry-run]
+    qbank import-stats --exam ID --csv Y [--dry-run]
+    qbank exams | bank | audit-sets
+    qbank select --total 50 [--type A=30 --type X2=15]
+    qbank finalize --exam ID
+    qbank export --exam ID --what key|booklet|crosswalk|report|all
 """
 
 from __future__ import annotations
@@ -581,9 +581,9 @@ def cmd_export(args: argparse.Namespace) -> int:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="itembank", description="口腔組織学 試験問題バンク")
-    parser.add_argument("--version", action="version", version=f"itembank {__version__}")
-    parser.add_argument("--db", help="SQLite ファイル(既定は %%APPDATA%%\\ItemBank)")
+    parser = argparse.ArgumentParser(prog="qbank", description="口腔組織学 試験問題バンク")
+    parser.add_argument("--version", action="version", version=f"qbank {__version__}")
+    parser.add_argument("--db", help="SQLite ファイル(既定は %%APPDATA%%\\Qbank-MCQ)")
     parser.add_argument("-v", "--verbose", action="store_true", help="デバッグログを出す")
     sub = parser.add_subparsers(dest="command", required=True)
 

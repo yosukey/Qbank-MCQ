@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from itembank.core.typing_rules import (
+from qbank_mcq.core.typing_rules import (
     TYPE_A,
     TYPE_X2,
     TYPE_X3,

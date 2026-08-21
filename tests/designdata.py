@@ -12,7 +12,7 @@
 
 from __future__ import annotations
 
-from itembank.core.stats import BLANK, PATTERNS
+from qbank_mcq.core.stats import BLANK, PATTERNS
 
 #: 設計書 §10.2 の 1 行目::
 #:

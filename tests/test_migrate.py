@@ -16,9 +16,9 @@ from pathlib import Path
 import pytest
 from sqlalchemy import inspect, text
 
-from itembank.core import paths
-from itembank.core.db import make_engine
-from itembank.core.migrate import (
+from qbank_mcq.core import paths
+from qbank_mcq.core.db import make_engine
+from qbank_mcq.core.migrate import (
     MIGRATIONS,
     TARGET_VERSION,
     MigrationFailedError,

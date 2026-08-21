@@ -12,7 +12,7 @@ from __future__ import annotations
 import pytest
 from sqlalchemy.orm import Session
 
-from itembank.core.bank import (
+from qbank_mcq.core.bank import (
     create_question,
     derivation_family,
     derivation_parent,
@@ -26,8 +26,8 @@ from itembank.core.bank import (
     upsert_choice_set,
     validate_draft,
 )
-from itembank.core.db import Q_DRAFT, ChoiceSet, QuestionVersion
-from itembank.core.typing_rules import TYPE_A
+from qbank_mcq.core.db import Q_DRAFT, ChoiceSet, QuestionVersion
+from qbank_mcq.core.typing_rules import TYPE_A
 
 HARD_TISSUE = ["エナメル質", "象牙質", "セメント質", "歯髄", "歯根膜"]
 STEM_A = "最も硬い組織はどれか。1つ選べ。"
@@ -403,6 +403,6 @@ def test_derive_from_a_reshuffled_order(session: Session) -> None:
 
 
 def test_type_a_question_defaults_to_type_a(session: Session) -> None:
-    from itembank.core.typing_rules import derive_item_type
+    from qbank_mcq.core.typing_rules import derive_item_type
 
     assert derive_item_type(STEM_A) == TYPE_A

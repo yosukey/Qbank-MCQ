@@ -65,7 +65,7 @@ python tools/update_golden.py testdata/exam_2025.docx
 - パターン列は 31 列 + 無回答。`その他` は任意
 - 値はすべて人数(整数)。割合で渡すと検証チェーンがブロックする
 
-形が違う場合は `itembank import-stats --dry-run` が何が足りないかを名指しで報告する。
+形が違う場合は `qbank import-stats --dry-run` が何が足りないかを名指しで報告する。
 
 ## sample/
 

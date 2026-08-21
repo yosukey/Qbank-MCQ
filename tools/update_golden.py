@@ -21,7 +21,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from itembank.io.docx_read import parse_docx  # noqa: E402
+from qbank_mcq.io.docx_read import parse_docx  # noqa: E402
 
 
 def golden_path(docx: Path) -> Path:

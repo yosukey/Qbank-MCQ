@@ -13,9 +13,9 @@ from pathlib import Path
 
 import pytest
 
-from itembank import __version__
-from itembank.ui.about import about_rows, version_label, window_title
-from itembank.version import (
+from qbank_mcq import __version__
+from qbank_mcq.ui.about import about_rows, version_label, window_title
+from qbank_mcq.version import (
     VERSION,
     InvalidTagError,
     installer_filename,
@@ -89,17 +89,20 @@ def test_numeric_version_for_windows(version: str, expected: str) -> None:
 
 
 def test_installer_filename_embeds_the_version() -> None:
-    assert installer_filename("0.3.0") == "ItemBank-0.3.0-setup.exe"
-    assert installer_filename() == f"ItemBank-{VERSION}-setup.exe"
+    assert installer_filename("0.3.0") == "Qbank-MCQ-0.3.0-setup.exe"
+    assert installer_filename() == f"Qbank-MCQ-{VERSION}-setup.exe"
 
 
 def test_the_iss_builds_the_same_filename() -> None:
     """Inno Setup 側の組み立てが ``installer_filename`` とずれていないこと。"""
-    iss = (ROOT / "packaging" / "itembank.iss").read_text(encoding="utf-8")
+    iss = (ROOT / "packaging" / "qbank-mcq.iss").read_text(encoding="utf-8")
     matched = re.search(r"^OutputBaseFilename=(.+)$", iss, re.MULTILINE)
     assert matched is not None, "OutputBaseFilename が見つかりません"
     rendered = (
-        matched.group(1).strip().replace("{#AppName}", "ItemBank").replace("{#AppVersion}", "0.3.0")
+        matched.group(1)
+        .strip()
+        .replace("{#AppName}", "Qbank-MCQ")
+        .replace("{#AppVersion}", "0.3.0")
     )
     assert f"{rendered}.exe" == installer_filename("0.3.0")
 
@@ -108,7 +111,7 @@ def test_the_iss_builds_the_same_filename() -> None:
 
 
 def test_the_window_shows_the_version() -> None:
-    assert window_title("0.3.0") == "ItemBank 0.3.0"
+    assert window_title("0.3.0") == "Qbank-MCQ 0.3.0"
     assert "0.3.0" in version_label("0.3.0")
     rows = dict(about_rows(version="0.3.0"))
     assert rows["バージョン"] == "0.3.0"
@@ -131,7 +134,7 @@ def test_about_rows_show_the_bank_at_a_glance() -> None:
         about_rows(
             schema_version=3,
             data_dir=Path("/tmp/data"),
-            db_path=Path("/tmp/data/itembank.sqlite"),
+            db_path=Path("/tmp/data/qbank_mcq.sqlite"),
             counts={"問題": 120},
             frozen=True,
         )
@@ -146,7 +149,7 @@ def test_about_rows_show_the_bank_at_a_glance() -> None:
 
 def test_stamping_rewrites_only_the_version_line(tmp_path: Path) -> None:
     stamp_version = load_stamp_module()
-    source = ROOT / "src" / "itembank" / "version.py"
+    source = ROOT / "src" / "qbank_mcq" / "version.py"
     copy = tmp_path / "version.py"
     copy.write_text(source.read_text(encoding="utf-8"), encoding="utf-8")
 
@@ -165,7 +168,7 @@ def test_stamping_rewrites_only_the_version_line(tmp_path: Path) -> None:
 def test_stamping_is_idempotent(tmp_path: Path) -> None:
     stamp_version = load_stamp_module()
     copy = tmp_path / "version.py"
-    copy.write_text((ROOT / "src" / "itembank" / "version.py").read_text("utf-8"), "utf-8")
+    copy.write_text((ROOT / "src" / "qbank_mcq" / "version.py").read_text("utf-8"), "utf-8")
     once = stamp_version.stamp("0.3.0", path=copy)
     assert stamp_version.stamp("0.3.0", path=copy) == once
 
@@ -181,7 +184,7 @@ def test_stamping_a_file_without_the_assignment_is_an_error(tmp_path: Path) -> N
 def test_the_cli_reports_what_the_workflow_needs(capsys: pytest.CaptureFixture[str]) -> None:
     """``--check`` は書き換えずに、後続ステップが読む値だけを出す。"""
     stamp_version = load_stamp_module()
-    source = ROOT / "src" / "itembank" / "version.py"
+    source = ROOT / "src" / "qbank_mcq" / "version.py"
     before = source.read_text(encoding="utf-8")
 
     assert stamp_version.main(["--ref", "refs/tags/v0.3.0", "--check"]) == 0
@@ -190,7 +193,7 @@ def test_the_cli_reports_what_the_workflow_needs(capsys: pytest.CaptureFixture[s
     assert printed == {
         "version": "0.3.0",
         "numeric_version": "0.3.0.0",
-        "installer": "ItemBank-0.3.0-setup.exe",
+        "installer": "Qbank-MCQ-0.3.0-setup.exe",
         "tag": "v0.3.0",
     }
     assert source.read_text(encoding="utf-8") == before

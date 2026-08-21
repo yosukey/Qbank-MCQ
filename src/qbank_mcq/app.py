@@ -29,7 +29,7 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "PySide6 が入っていません。開発環境では次で入れてください:\n"
             '    pip install -e ".[gui]"\n'
-            "CLI だけなら `itembank --help` が使えます。",
+            "CLI だけなら `qbank --help` が使えます。",
             file=sys.stderr,
         )
         return 2

@@ -1,4 +1,4 @@
-"""リリースタグのバージョンを ``src/itembank/version.py`` に焼き込む(実装計画 §8)。
+"""リリースタグのバージョンを ``src/qbank_mcq/version.py`` に焼き込む(実装計画 §8)。
 
 ``.github/workflows/release.yml`` が、exe をビルドする前にこれを一度だけ走らせる。
 
@@ -12,7 +12,7 @@
 
     version=0.3.0
     numeric_version=0.3.0.0
-    installer=ItemBank-0.3.0-setup.exe
+    installer=Qbank-MCQ-0.3.0-setup.exe
 
 を出し、``GITHUB_OUTPUT`` があればそこにも同じものを書く(後続ステップが使う)。
 """
@@ -28,14 +28,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "src"))
 
-from itembank.version import (  # noqa: E402
+from qbank_mcq.version import (  # noqa: E402
     InvalidTagError,
     installer_filename,
     numeric_version,
     version_from_tag,
 )
 
-VERSION_FILE = ROOT / "src" / "itembank" / "version.py"
+VERSION_FILE = ROOT / "src" / "qbank_mcq" / "version.py"
 
 #: 置換対象。行頭の ``VERSION = "…"`` ちょうど 1 行だけを狙う。
 ASSIGNMENT_RE = re.compile(r'^VERSION = "[^"]*"$', re.MULTILINE)
