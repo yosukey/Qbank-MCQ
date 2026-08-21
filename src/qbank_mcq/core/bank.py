@@ -21,7 +21,7 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from . import choiceset as cs
@@ -128,6 +128,106 @@ def refresh_links_for(
         created.append(link)
     session.flush()
     return created
+
+
+def rebuild_all_links(session: Session, *, min_shared: int = 3) -> int:
+    """全セットの近似リンクを張り直す。設定画面で閾値を変えたときに呼ぶ(設計書 §14-10)。
+
+    閾値を上げても古いリンクが残ると、露出管理(§6.4-1)が実際より厳しく効き続ける。
+    そこで**いったん全消ししてから**張り直す。
+    """
+    session.query(ChoiceSetLink).delete()
+    session.flush()
+    sets = session.scalars(select(ChoiceSet)).all()
+    for target in sets:
+        refresh_links_for(session, target, min_shared=min_shared)
+    return session.query(ChoiceSetLink).count()
+
+
+def add_link(session: Session, set_a: int, set_b: int, *, note: str | None = None) -> ChoiceSetLink:
+    """手動でリンクを張る(設計書 §6.3: 自動リンクは提案であり手動で追加できる)。"""
+    if set_a == set_b:
+        raise ValueError("同じセット同士はリンクできません")
+    a, b = sorted((set_a, set_b))
+    link = session.get(ChoiceSetLink, (a, b))
+    shared = cs.set_similarity(
+        session.get(ChoiceSet, a).item_htmls(), session.get(ChoiceSet, b).item_htmls()
+    )
+    if link is None:
+        link = ChoiceSetLink(set_a=a, set_b=b)
+        session.add(link)
+    link.shared = shared
+    link.relation = cs.relation_for(shared) or "手動"
+    link.note = note
+    session.flush()
+    return link
+
+
+def remove_link(session: Session, set_a: int, set_b: int) -> bool:
+    """リンクを解除する。解除できたら ``True``。"""
+    a, b = sorted((set_a, set_b))
+    link = session.get(ChoiceSetLink, (a, b))
+    if link is None:
+        return False
+    session.delete(link)
+    session.flush()
+    return True
+
+
+def merge_choice_sets(session: Session, source: ChoiceSet, target: ChoiceSet) -> int:
+    """``source`` を ``target`` に統合する(設計書 §6.3 の「統合を提案」)。
+
+    署名が同じセットは作られないので、統合したくなるのは**マークアップ違いで
+    別セットになってしまった**ときである(``audit_tagless_duplicates`` が拾う)。
+    そこで対応付けはタグ除去後のテキストで行う。
+
+    印字の見え方は変えない。``choice_order`` を ``target`` の項目番号に張り替える
+    だけなので、**正答(印字記号)も過去の統計もそのまま通じる**。
+
+    1 対 1 に対応付かないときは何もせず ``ValueError``。
+    """
+    if source.id == target.id:
+        raise ValueError("同じセットは統合できません")
+
+    by_plain: dict[str, list[int]] = {}
+    for item in target.items:
+        by_plain.setdefault(strip_tags(item.text_html), []).append(item.item_no)
+
+    mapping: dict[int, int] = {}
+    for item in source.items:
+        key = strip_tags(item.text_html)
+        candidates = by_plain.get(key, [])
+        if len(candidates) != 1:
+            raise ValueError(
+                f"項目「{key}」が {target.id} の項目と 1 対 1 に対応しません。統合できません"
+            )
+        mapping[item.item_no] = candidates[0]
+    if len(set(mapping.values())) != len(mapping):
+        raise ValueError("複数の項目が同じ項目に対応しました。統合できません")
+
+    moved = 0
+    versions = session.scalars(
+        select(QuestionVersion).where(QuestionVersion.choice_set_id == source.id)
+    ).all()
+    for version in versions:
+        printed = cs.parse_choice_order(version.choice_order)
+        version.choice_set_id = target.id
+        version.choice_order = cs.format_choice_order([mapping[no] for no in printed])
+        moved += 1
+
+    for link in session.scalars(
+        select(ChoiceSetLink).where(
+            (ChoiceSetLink.set_a == source.id) | (ChoiceSetLink.set_b == source.id)
+        )
+    ).all():
+        session.delete(link)
+    session.flush()
+
+    session.delete(source)
+    session.flush()
+    refresh_links_for(session, target)
+    log.info("選択肢セット %s を %s に統合しました(%d 版)", source.id, target.id, moved)
+    return moved
 
 
 def linked_set_ids(session: Session, set_id: int) -> set[int]:
@@ -261,9 +361,7 @@ def create_question_from_printed(
 
     ``(保存結果, セットを新規作成したか)`` を返す。
     """
-    normalized = [normalize_choice(c) for c in printed_choices]
-    choice_set, created = upsert_choice_set(session, normalized)
-    order = cs.resolve_choice_order(choice_set.items_by_no(), normalized)
+    choice_set, order, created = resolve_printed(session, printed_choices)
     result = create_question(
         session,
         stem_html=stem_html,
@@ -276,6 +374,104 @@ def create_question_from_printed(
         image_path=image_path,
     )
     return result, created
+
+
+def resolve_printed(session: Session, printed_choices: list[str]) -> tuple[ChoiceSet, str, bool]:
+    """印字順の選択肢を ``(セット, choice_order, セットを新規作成したか)`` に解く。
+
+    セットは順序を持たない集合なので(設計書 §6.1)、並び替えただけの選択肢は
+    同じセットに解決され、違いは ``choice_order`` にだけ現れる。**画面もこの経路を
+    通す**。通さないと、並び替えのたびに新しいセットが増える。
+    """
+    normalized = [normalize_choice(c) for c in printed_choices]
+    choice_set, created = upsert_choice_set(session, normalized)
+    order = cs.resolve_choice_order(choice_set.items_by_no(), normalized)
+    return choice_set, order, created
+
+
+def revise_question_from_printed(
+    session: Session,
+    question: Question,
+    *,
+    stem_html: str,
+    printed_choices: list[str],
+    correct: str,
+    image_path: str | None = None,
+    allow_inplace: bool = True,
+) -> tuple[SaveResult, bool]:
+    """印字順の選択肢で改訂する(``revise_question`` の印字順版)。"""
+    choice_set, order, created = resolve_printed(session, printed_choices)
+    result = revise_question(
+        session,
+        question,
+        stem_html=stem_html,
+        choice_set=choice_set,
+        choice_order=order,
+        correct=correct,
+        image_path=image_path,
+        allow_inplace=allow_inplace,
+    )
+    return result, created
+
+
+def derive_question_from_printed(
+    session: Session,
+    source: QuestionVersion,
+    *,
+    stem_html: str,
+    printed_choices: list[str],
+    correct: str,
+    status: str = Q_ACTIVE,
+    note: str | None = None,
+    image_path: str | None = None,
+    inherit_tags: bool = True,
+) -> tuple[SaveResult, bool]:
+    """印字順の選択肢で派生を作る(``derive_question`` の印字順版)。"""
+    choice_set, order, created = resolve_printed(session, printed_choices)
+    result = derive_question(
+        session,
+        source,
+        stem_html=stem_html,
+        choice_set=choice_set,
+        choice_order=order,
+        correct=correct,
+        status=status,
+        note=note,
+        image_path=image_path,
+        inherit_tags=inherit_tags,
+    )
+    return result, created
+
+
+def latest_versions_using_set(session: Session, choice_set_id: int) -> list[QuestionVersion]:
+    """このセットを使っている問題の**最新版**(設計書 §2.4 の「セット内の既存設問」)。
+
+    旧版も混ぜると「同じ問い方が既にある」の判断を誤る。
+    """
+    rows = session.scalars(
+        select(QuestionVersion).where(QuestionVersion.choice_set_id == choice_set_id)
+    ).all()
+    latest: dict[int, QuestionVersion] = {}
+    for version in rows:
+        current = latest.get(version.question_id)
+        if current is None or version.version_no > current.version_no:
+            latest[version.question_id] = version
+    return [latest[qid] for qid in sorted(latest)]
+
+
+def unused_correct_item_nos(session: Session, choice_set: ChoiceSet) -> list[int]:
+    """まだ正答として使われていない項目番号(設計書 §2.4)。
+
+        セット内の各項目について「まだ正答として使われていない項目」を提示すると、
+        未着手の問い方が一目で分かる
+
+    正答は印字記号で保存されているので、版ごとの ``choice_order`` を通して
+    項目番号に戻してから数える。
+    """
+    used: set[int] = set()
+    for version in latest_versions_using_set(session, choice_set.id):
+        used.update(cs.correct_to_item_nos(version.correct, version.choice_order))
+    return [item.item_no for item in choice_set.items if item.item_no not in used]
 
 
 def find_duplicate_question(
@@ -479,3 +675,51 @@ def tag_names(session: Session, question_id: int) -> list[str]:
         .where(QuestionTag.question_id == question_id)
     ).all()
     return sorted(r[0] for r in rows)
+
+
+def tag_usage(session: Session) -> list[tuple[Tag, int]]:
+    """``(タグ, 付いている問題数)`` の一覧。設定画面のタグ管理が使う(設計書 §14-10)。"""
+    counts = dict(
+        session.execute(select(QuestionTag.tag_id, func.count()).group_by(QuestionTag.tag_id)).all()
+    )
+    tags = session.scalars(select(Tag).order_by(Tag.name)).all()
+    return [(t, int(counts.get(t.id, 0))) for t in tags]
+
+
+def rename_tag(session: Session, tag: Tag, new_name: str) -> Tag:
+    """タグの名前を変える。**同名のタグがあれば統合する**(付け替えてから消す)。"""
+    name = new_name.strip()
+    if not name:
+        raise ValueError("タグ名が空です")
+    if name == tag.name:
+        return tag
+
+    existing = session.scalar(select(Tag).where(Tag.name == name))
+    if existing is None:
+        tag.name = name
+        session.flush()
+        return tag
+
+    # 統合。両方に付いている問題で主キーが衝突しないよう、先に重複を除く。
+    already = {
+        r[0]
+        for r in session.execute(
+            select(QuestionTag.question_id).where(QuestionTag.tag_id == existing.id)
+        ).all()
+    }
+    for link in session.scalars(select(QuestionTag).where(QuestionTag.tag_id == tag.id)).all():
+        if link.question_id in already:
+            session.delete(link)
+        else:
+            link.tag_id = existing.id
+    session.flush()
+    delete_tag(session, tag)
+    return existing
+
+
+def delete_tag(session: Session, tag: Tag) -> None:
+    """タグを消す。問題との結び付きも消える(問題自体は残る)。"""
+    session.query(QuestionTag).filter(QuestionTag.tag_id == tag.id).delete()
+    session.query(Tag).filter(Tag.parent_id == tag.id).update({Tag.parent_id: None})
+    session.delete(tag)
+    session.flush()

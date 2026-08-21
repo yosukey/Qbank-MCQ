@@ -39,6 +39,7 @@ EXCLUDES = [
     "PySide6.QtDataVisualization",
     "PySide6.QtDesigner",
     "PySide6.QtHelp",
+    "PySide6.QtLocation",
     "PySide6.QtMultimedia",
     "PySide6.QtMultimediaWidgets",
     "PySide6.QtNetworkAuth",
@@ -58,6 +59,8 @@ EXCLUDES = [
     "PySide6.QtSensors",
     "PySide6.QtSerialPort",
     "PySide6.QtSpatialAudio",
+    "PySide6.QtSql",  # DB は SQLAlchemy + 標準ライブラリの sqlite3 で読む
+    "PySide6.QtStateMachine",
     "PySide6.QtTest",
     "PySide6.QtTextToSpeech",
     "PySide6.QtWebChannel",
@@ -66,10 +69,18 @@ EXCLUDES = [
     "PySide6.QtWebEngineWidgets",
     "PySide6.QtWebSockets",
     # 開発・テスト用。配布物には要らない。
-    "matplotlib",
-    "numpy",
+    # **matplotlib と numpy は外さない。** 問題詳細と選択肢セットの図(設計書 §14-3)
+    # が使う。外すと画面を開いた瞬間に ImportError で落ちる。
+    "IPython",
+    "PIL.ImageQt",
+    "matplotlib.backends.backend_webagg",
+    "matplotlib.backends.backend_webagg_core",
+    "pandas",  # 設計書 §15: 依存に挙がっているが実装では使っていない
+    "pdfplumber",
     "pytest",
+    "scipy",  # 設計書 §15:「scipy不要」
     "tkinter",
+    "tornado",
 ]
 
 # 冊子テンプレートやアイコンを置いたら一緒に入れる(実装計画 §5 の resources/)。
@@ -132,6 +143,64 @@ a = Analysis(  # noqa: F821
     excludes=EXCLUDES,
     noarchive=False,
 )
+
+# **Python モジュールを excludes に挙げるだけでは、共有ライブラリとプラグインが残る。**
+# PySide6 のフックが Qt を丸ごと集めてくるため、実体もここで落とす。名前の断片は
+# Windows(Qt6Quick.dll)と Linux(libQt6Quick.so.6)で共通。
+DROP_QT_LIBS = (
+    "Qt63D",
+    "Qt6Bluetooth",
+    "Qt6Charts",
+    "Qt6DataVisualization",
+    "Qt6Designer",
+    "Qt6Help",
+    "Qt6Multimedia",
+    "Qt6Nfc",
+    "Qt6Pdf",
+    "Qt6Positioning",
+    "Qt6Qml",
+    "Qt6Quick",
+    "Qt6RemoteObjects",
+    "Qt6Scxml",
+    "Qt6Sensors",
+    "Qt6SerialPort",
+    "Qt6SpatialAudio",
+    "Qt6Sql",
+    "Qt6StateMachine",
+    "Qt6Test",
+    "Qt6TextToSpeech",
+    "Qt6WebChannel",
+    "Qt6WebEngine",
+    "Qt6WebSockets",
+)
+
+# Qt のプラグインのうち使わないもの。
+# **platforms / styles / imageformats / iconengines は残す。** 落とすと起動しない。
+DROP_QT_PLUGIN_DIRS = (
+    "PySide6/Qt/plugins/multimedia",
+    "PySide6/Qt/plugins/position",
+    "PySide6/Qt/plugins/qmltooling",
+    "PySide6/Qt/plugins/renderers",
+    "PySide6/Qt/plugins/sensors",
+    "PySide6/Qt/plugins/sqldrivers",
+    "PySide6/Qt/plugins/texttospeech",
+    "PySide6/Qt/plugins/webview",
+    "PySide6/Qt/qml",
+)
+
+# 翻訳ファイルは 30 MB 近くある。日本語の UI を自前で書いているので使わない。
+DROP_DATA_DIRS = ("PySide6/translations", *DROP_QT_PLUGIN_DIRS)
+
+
+def _keep(entry, dropped_names, dropped_dirs):
+    dest = entry[0].replace("\\", "/")
+    if any(name in dest for name in dropped_names):
+        return False
+    return not any(dest.startswith(d) or f"/{d}" in dest for d in dropped_dirs)
+
+
+a.binaries = [b for b in a.binaries if _keep(b, DROP_QT_LIBS, DROP_QT_PLUGIN_DIRS)]
+a.datas = [d for d in a.datas if _keep(d, (), DROP_DATA_DIRS)]
 
 pyz = PYZ(a.pure)  # noqa: F821
 

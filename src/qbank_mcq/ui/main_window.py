@@ -1,100 +1,232 @@
-"""起動確認用のメインウィンドウ(実装計画 §2.2 スパイク②)。
+"""メインウィンドウ。タブで画面を束ねる(設計書 §14)。
 
-本番の画面構成は M4 で作る。ここでは配布物が起動したことと**バージョン**、それに
-DB が読めていることを目視できれば足りる。表示文言は ``about.py`` にある。
+タブの並びは設計書 §14 の番号どおり。**局面の取り違えを防ぐ**ため(設計書 §1.4)、
+局面A(過去問一括取込)と局面B(統計取込)は別のタブに分け、統計取込のタブでは
+問題を作る導線を一切置かない。
+
+どのタブも ``refresh()`` を持ち、他のタブが DB を変えたら呼ばれる。GUI は 1 本の
+セッションを共有しているため(``ui.workspace``)、読み直しは安い。
 """
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QFont, QGuiApplication
-from PySide6.QtWidgets import (
-    QFormLayout,
-    QFrame,
-    QLabel,
-    QMainWindow,
-    QVBoxLayout,
-    QWidget,
-)
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
+import logging
+from typing import Protocol, runtime_checkable
 
+from PySide6.QtGui import QAction
+from PySide6.QtWidgets import QMainWindow, QMessageBox, QTabWidget, QWidget
+
+from .. import __version__
 from ..core import paths
-from ..core.db import ChoiceSet, Exam, Question
+from ..core.updates import check_for_update as check_update
 from . import about
+from .bank_view import BankView
+from .choiceset_view import ChoiceSetView
+from .exam_builder import ExamBuilderView
+from .export_view import ExportView
+from .import_view import ImportView
+from .item_view import ItemView
+from .question_detail import QuestionDetail
+from .question_editor import QuestionEditor
+from .settings_view import SettingsView
+from .stats_import import StatsImportView
+from .workspace import Workspace
+
+log = logging.getLogger(__name__)
 
 
-def bank_counts(session: Session) -> dict[str, int]:
-    """窓に出す件数。SQLite が読めていることの確認を兼ねる。"""
-    return {
-        "問題": session.scalar(select(func.count()).select_from(Question)) or 0,
-        "選択肢セット": session.scalar(select(func.count()).select_from(ChoiceSet)) or 0,
-        "試験": session.scalar(select(func.count()).select_from(Exam)) or 0,
-    }
+@runtime_checkable
+class RefreshableTab(Protocol):
+    """DB が変わったら読み直せるタブ。"""
+
+    def refresh(self) -> None: ...
 
 
 class MainWindow(QMainWindow):
-    """アプリ名とバージョンを掲げ、DB の所在と件数を並べるだけの窓。"""
-
-    def __init__(
-        self,
-        *,
-        schema_version: int | None = None,
-        counts: dict[str, int] | None = None,
-        note: str | None = None,
-    ) -> None:
-        super().__init__()
+    def __init__(self, workspace: Workspace, parent: QWidget | None = None) -> None:
+        super().__init__(parent)
+        self.workspace = workspace
+        # 版番号の出どころは ``about`` ひとつ(実装計画 §8: タグ・exe のプロパティ・
+        # インストーラ名・窓のタイトルが必ず一致する)。ここで文字列を組み直さない。
         self.setWindowTitle(about.window_title())
+        self.resize(1180, 780)
 
-        central = QWidget(self)
-        layout = QVBoxLayout(central)
-        layout.setContentsMargins(24, 20, 24, 20)
-        layout.setSpacing(12)
+        self.tabs = QTabWidget(self)
+        self.setCentralWidget(self.tabs)
+        self._build_tabs()
+        self._build_menu()
+        self._show_startup_status()
 
-        title = QLabel(paths.APP_NAME, central)
-        title_font = QFont(title.font())
-        title_font.setPointSize(title_font.pointSize() + 8)
-        title_font.setBold(True)
-        title.setFont(title_font)
-        layout.addWidget(title)
+    # -- 組み立て -----------------------------------------------------------
+    def _build_tabs(self) -> None:
+        self.bank_view = BankView(self.workspace, self)
+        self.bank_view.createRequested.connect(self.open_editor)
+        self.bank_view.duplicateRequested.connect(self.open_duplicate)
+        self.bank_view.editRequested.connect(lambda qid: self.open_editor(question_id=qid))
+        self.bank_view.detailRequested.connect(self.open_detail)
 
-        # バージョンはタイトルバーにも出るが、スクリーンショットで拾えるよう窓の中にも出す。
-        version = QLabel(about.version_label(), central)
-        version.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-        layout.addWidget(version)
+        self.choiceset_view = ChoiceSetView(self.workspace, self)
+        self.choiceset_view.createFromSetRequested.connect(
+            lambda set_id: self.open_editor(choice_set_id=set_id)
+        )
+        self.choiceset_view.questionRequested.connect(self.open_detail)
 
-        line = QFrame(central)
-        line.setFrameShape(QFrame.Shape.HLine)
-        line.setFrameShadow(QFrame.Shadow.Sunken)
-        layout.addWidget(line)
+        self.item_view = ItemView(self.workspace, self)
 
-        form = QFormLayout()
-        form.setLabelAlignment(Qt.AlignmentFlag.AlignRight)
-        for label, value in about.about_rows(
-            schema_version=schema_version,
+        self.import_view = ImportView(self.workspace, self)
+        self.import_view.imported.connect(lambda _: self.refresh_all())
+
+        self.exam_builder = ExamBuilderView(self.workspace, self)
+        self.exam_builder.examChanged.connect(lambda _: self.refresh_all())
+
+        self.export_view = ExportView(self.workspace, self)
+
+        self.stats_import = StatsImportView(self.workspace, self)
+        self.stats_import.imported.connect(lambda _: self.refresh_all())
+        # 設計書 §2.6: フラグ一覧から改訂へ直接進める。
+        self.stats_import.reviseRequested.connect(lambda qid: self.open_editor(question_id=qid))
+
+        self.settings_view = SettingsView(self.workspace, self)
+        self.settings_view.settingsChanged.connect(self.refresh_all)
+        self.settings_view.databaseRestored.connect(self._reopen)
+
+        # 並びは設計書 §14 の番号順。局面A(過去問一括取込)と局面B(統計取込)を
+        # 別のタブに分けるのが §1.4 の「局面の取り違えを防ぐ仕組み」にあたる。
+        self.tabs.addTab(self.bank_view, "問題バンク")
+        self.tabs.addTab(self.choiceset_view, "選択肢セット")
+        self.tabs.addTab(self.item_view, "選択肢アイテム")
+        self.tabs.addTab(self.import_view, "過去問一括取込")
+        self.tabs.addTab(self.exam_builder, "試験セット")
+        self.tabs.addTab(self.export_view, "出力")
+        self.tabs.addTab(self.stats_import, "統計取込")
+        self.tabs.addTab(self.settings_view, "設定")
+
+    # -- 問題の編集と詳細(設計書 §14-2, §14-3)-----------------------------
+    def open_editor(
+        self,
+        question_id: int | None = None,
+        *,
+        choice_set_id: int | None = None,
+        derive_from_question_id: int | None = None,
+    ) -> QuestionEditor:
+        """編集ダイアログを開く。閉じたら一覧を読み直す。"""
+        editor = QuestionEditor(
+            self.workspace,
+            question_id=question_id,
+            choice_set_id=choice_set_id,
+            derive_from_question_id=derive_from_question_id,
+            parent=self,
+        )
+        editor.finished.connect(lambda _: self.refresh_all())
+        editor.show()
+        return editor
+
+    def open_duplicate(self, question_id: int) -> QuestionEditor:
+        """複製作成(設計書 §14-1)。保存すると派生になる(§2.2)。"""
+        return self.open_editor(derive_from_question_id=question_id)
+
+    def open_detail(self, question_id: int) -> QuestionDetail:
+        detail = QuestionDetail(self.workspace, question_id, parent=self)
+        # 設計書 §2.6: 詳細から改訂へ直接進める。
+        detail.reviseRequested.connect(lambda qid: self.open_editor(question_id=qid))
+        detail.show()
+        return detail
+
+    def show_question(self, question_id: int) -> None:
+        """バンクのタブに切り替えてその問題を選ぶ(フラグ一覧からの導線)。"""
+        self.tabs.setCurrentWidget(self.bank_view)
+        self.bank_view.select_question(question_id)
+
+    def _build_menu(self) -> None:
+        file_menu = self.menuBar().addMenu("ファイル")
+
+        backup = QAction("バックアップを取る", self)
+        backup.triggered.connect(self._backup)
+        file_menu.addAction(backup)
+
+        refresh = QAction("読み直す", self)
+        refresh.setShortcut("F5")
+        refresh.triggered.connect(self.refresh_all)
+        file_menu.addAction(refresh)
+
+        file_menu.addSeparator()
+        quit_action = QAction("終了", self)
+        quit_action.setShortcut("Ctrl+Q")
+        quit_action.triggered.connect(self.close)
+        file_menu.addAction(quit_action)
+
+        help_menu = self.menuBar().addMenu("ヘルプ")
+        check = QAction("更新を確認", self)
+        check.triggered.connect(self.check_for_update)
+        help_menu.addAction(check)
+
+        about = QAction("このアプリについて", self)
+        about.triggered.connect(self._about)
+        help_menu.addAction(about)
+
+    def _show_startup_status(self) -> None:
+        """DB の場所とスキーマ移行の結果を出す(設計書 §15)。"""
+        migration = self.workspace.migration
+        message = f"DB: {self.workspace.db_file}"
+        if migration.changed:
+            message += f"  /  スキーマ {migration.from_version} → {migration.to_version} に移行"
+            if migration.backup:
+                message += f"(バックアップ: {migration.backup.name})"
+        self.statusBar().showMessage(message)
+
+    # -- 動作 ---------------------------------------------------------------
+    def refresh_all(self) -> None:
+        for index in range(self.tabs.count()):
+            widget = self.tabs.widget(index)
+            if isinstance(widget, RefreshableTab):
+                widget.refresh()
+
+    def _backup(self) -> None:
+        dest = self.workspace.backup()
+        self.statusBar().showMessage(
+            f"バックアップ: {dest}" if dest else "DB がまだありません", 8000
+        )
+
+    def _reopen(self) -> None:
+        """復元後に DB を開き直す。"""
+        self.workspace = Workspace.open(self.workspace.db_file)
+        self.tabs.clear()
+        self._build_tabs()
+        self._show_startup_status()
+
+    def check_for_update(self) -> str:
+        """Releases の version.json を見に行く(実装計画 M7-5)。
+
+        押されたときにだけ、短い待ち時間で見る。裏で回して通知するほどの機能ではなく、
+        繋がらなくても知らせるだけで済む。結果は状態表示に出す。
+        """
+        _, message = check_update(__version__)
+        self.statusBar().showMessage(message, 15000)
+        return message
+
+    def _about(self) -> None:
+        """版番号・実行形態・DB の所在を出す。
+
+        配布物の不具合報告では「どのバージョンの、exe 版か開発版か」が最初に要る。
+        並べる中身は ``about`` が決める(Qt に依存しないのでテストから直接叩ける)。
+        """
+        rows = about.about_rows(
+            schema_version=self.workspace.migration.to_version,
             data_dir=paths.data_dir(),
-            db_path=paths.db_path(),
-            counts=counts,
-        ):
-            field = QLabel(value, central)
-            field.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
-            form.addRow(f"{label}:", field)
-        layout.addLayout(form)
+            db_path=self.workspace.db_file,
+        )
+        body = "\n".join(f"{label}: {value}" for label, value in rows)
+        QMessageBox.about(
+            self,
+            "Qbank-MCQ について",
+            f"Qbank-MCQ\n口腔組織学 試験問題バンクシステム\n\n{body}",
+        )
 
-        if note:
-            message = QLabel(note, central)
-            message.setWordWrap(True)
-            layout.addWidget(message)
-
-        layout.addStretch(1)
-        self.setCentralWidget(central)
-        self.resize(560, 360)
-        self._center()
-
-    def _center(self) -> None:
-        screen = QGuiApplication.primaryScreen()
-        if screen is None:
-            return
-        frame = self.frameGeometry()
-        frame.moveCenter(screen.availableGeometry().center())
-        self.move(frame.topLeft())
+    def closeEvent(self, event) -> None:  # noqa: N802 - Qt の命名
+        try:
+            self.workspace.commit()
+        except Exception:  # pragma: no cover - 保存に失敗しても閉じる
+            log.exception("終了時のコミットに失敗しました")
+            self.workspace.rollback()
+        self.workspace.close()
+        super().closeEvent(event)

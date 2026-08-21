@@ -1,76 +1,69 @@
-"""GUI エントリ(実装計画 §5)。PyInstaller はこのファイルを入口に固める。
+"""GUI エントリ(実装計画 §5 の ``app.py``)。
 
-CLI(``__main__.py``)と同じロジック層を使う。ここがやるのは
+    qbank gui            # CLI 経由
+    python -m qbank_mcq.app  # 直接
 
-1. ログの初期化(配布後は不具合の手がかりがログしかない — 実装計画 §1)
-2. DB を開いてスキーマ移行(失敗したらダイアログで止める — 実装計画 §7)
-3. 窓を出す
-
-だけ。画面の中身は M4 で ``ui/`` に足していく。
+PySide6 は任意依存(``pip install -e ".[gui]"``)。入っていなければ何をすれば
+よいかを表示して終える。**CLI だけで運用サイクルは一周する**ので、GUI が無い
+環境でも詰まない(実装計画 §0)。
 """
 
 from __future__ import annotations
 
 import logging
 import sys
+from collections.abc import Sequence
+from pathlib import Path
 
 from .core import paths
-from .core.migrate import MigrationFailedError, SchemaTooNewError, open_database
 from .version import VERSION
 
 log = logging.getLogger(__name__)
 
+GUI_MISSING_MESSAGE = (
+    "GUI には PySide6 が要ります。次のいずれかで入れてください:\n"
+    '    pip install -e ".[gui]"\n'
+    "    pip install PySide6\n"
+    "GUI なしでも CLI(qbank --help)で運用サイクルは一周します。"
+)
 
-def main(argv: list[str] | None = None) -> int:
-    """GUI を起動する。終了コードは Qt のイベントループの戻り値。"""
+
+def main(argv: Sequence[str] | None = None, *, db_file: Path | None = None) -> int:
+    """QApplication を起こしてメインウィンドウを出す。"""
+    paths.setup_logging(logging.INFO)
+
     try:
-        from PySide6.QtWidgets import QApplication, QMessageBox
-    except ImportError:  # pragma: no cover - 開発環境で GUI 依存を入れていない場合
-        print(
-            "PySide6 が入っていません。開発環境では次で入れてください:\n"
-            '    pip install -e ".[gui]"\n'
-            "CLI だけなら `qbank --help` が使えます。",
-            file=sys.stderr,
-        )
+        from PySide6.QtWidgets import QApplication
+    except ImportError:
+        print(GUI_MISSING_MESSAGE, file=sys.stderr)
         return 2
 
-    paths.setup_logging()
+    from .ui.main_window import MainWindow
+    from .ui.workspace import Workspace
+
     log.info("%s %s を起動します", paths.APP_NAME, VERSION)
 
-    app = QApplication(argv if argv is not None else sys.argv)
+    app = QApplication.instance() or QApplication(list(argv or sys.argv))
     app.setApplicationName(paths.APP_NAME)
+    app.setOrganizationName(paths.APP_NAME)
     app.setApplicationVersion(VERSION)
 
-    from .ui.main_window import MainWindow, bank_counts
-
-    engine = None
-    schema_version: int | None = None
-    counts: dict[str, int] | None = None
-    note: str | None = None
     try:
-        engine, result = open_database()
-        schema_version = result.to_version
-        if result.changed:
-            note = f"スキーマを {result.from_version} → {result.to_version} に移行しました" + (
-                f"(バックアップ: {result.backup})" if result.backup else ""
-            )
-        from .core.db import make_session_factory
-
-        with make_session_factory(engine)() as session:
-            counts = bank_counts(session)
-    except (MigrationFailedError, SchemaTooNewError) as exc:
-        # 移行に失敗した DB で画面を開くと壊し方が増えるだけなので、ここで止める。
+        workspace = Workspace.open(db_file)
+    except Exception as exc:
         log.exception("DB を開けませんでした")
-        QMessageBox.critical(None, paths.APP_NAME, str(exc))
+        from PySide6.QtWidgets import QMessageBox
+
+        QMessageBox.critical(
+            None,
+            "起動できません",
+            f"DB を開けませんでした。\n\n{exc}\n\nログ: {paths.log_dir() / 'qbank_mcq.log'}",
+        )
         return 1
 
-    window = MainWindow(schema_version=schema_version, counts=counts, note=note)
+    window = MainWindow(workspace)
     window.show()
-    try:
-        return app.exec()
-    finally:
-        if engine is not None:
-            engine.dispose()
+    return app.exec()
 
 
 if __name__ == "__main__":  # pragma: no cover

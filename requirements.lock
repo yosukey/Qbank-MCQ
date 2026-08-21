@@ -1,14 +1,17 @@
 # 実行時依存の固定(実装計画 §1)。
 #
 #   **exe ビルドの再現性はロックファイルに依存する。**
-#   GitHub Actions は `pip install -r requirements.lock` を使う(実装計画 §8)。
+#
+# ここにあるのは **CLI だけで運用サイクルを一周する**のに要るものだけ(実装計画 §0)。
+# GUI(PySide6 / matplotlib)は `requirements-gui.lock`、配布(PyInstaller)は
+# `requirements-build.lock` にある。ロックは次のように重なっている:
+#
+#   requirements.lock  ←  requirements-gui.lock  ←  requirements-build.lock
+#   (CLI)                 (+ 画面と可視化)          (+ exe 化)
 #
 # 更新するとき:
 #   python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 #   .venv/bin/pip freeze でバージョンを確認し、ここを書き換えて pytest を通す。
-#
-# GUI と配布(PySide6 / PyInstaller)は `requirements-build.lock` にある。
-# Windows インストーラのビルドはそちらを使う。matplotlib は M6 で追加する。
 
 SQLAlchemy==2.0.52
 et_xmlfile==2.0.0
