@@ -1,0 +1,26 @@
+# Windows インストーラを作るときの依存(実装計画 §8 / M7)。
+#
+#   pip install -r requirements-build.lock
+#
+# `requirements.lock`(実行時依存)に、GUI と配布のための依存を足したもの。
+# **リリースの再現性はここに依存する。**`.github/workflows/release.yml` はこの
+# ファイルだけを使い、`pip install` で最新版を拾いに行かない。
+#
+# 更新するとき: 版を上げて Windows で実際にビルドし、インストール・起動まで通す。
+# PySide6 と Qt は版によって PyInstaller との相性が変わるため、まとめて上げる。
+
+-r requirements.lock
+
+# GUI(pyproject の [gui] extra と同じもの)。PySide6 の 3 つは版を揃える必要がある。
+PySide6==6.11.2
+PySide6_Essentials==6.11.2
+PySide6_Addons==6.11.2
+shiboken6==6.11.2
+
+# 配布(exe 化)。
+pyinstaller==6.22.2
+pyinstaller-hooks-contrib==2026.6
+altgraph==0.17.5
+pefile==2024.8.26
+pywin32-ctypes==0.2.3
+packaging==26.3

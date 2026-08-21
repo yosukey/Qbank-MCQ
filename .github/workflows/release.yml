@@ -1,0 +1,162 @@
+name: release
+
+# 実装計画 §8:
+#
+#   git tag v0.3.0 && git push --tags
+#     → GitHub Actions (windows-latest)
+#         → pip install -r requirements-build.lock
+#         → pytest
+#         → PyInstaller (onedir)
+#         → Inno Setup
+#         → Release に Qbank-MCQ-0.3.0-setup.exe を添付
+#
+# バージョンの正はタグ。`tools/stamp_version.py` がタグの値を
+# `src/qbank_mcq/version.py` に焼き込んでからビルドするので、
+# **窓に出る版番号・exe のプロパティ・インストーラのファイル名が必ず一致する**。
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "タグを打たずに試すときのバージョン(例 0.3.0)。Release は作らない"
+        required: true
+        type: string
+
+permissions:
+  contents: write # Release の作成に要る
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-installer:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: pwsh
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # 実装計画 §1: Python 3.11 系に固定
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: |
+            requirements.lock
+            requirements-build.lock
+
+      - name: バージョンをタグから決めて焼き込む
+        id: version
+        env:
+          # ${{ }} をコマンドに直接埋めない(タグ名は外から来る値なので)
+          REF: ${{ github.ref }}
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if ($env:INPUT_VERSION) {
+            python tools/stamp_version.py --version $env:INPUT_VERSION
+          } else {
+            python tools/stamp_version.py --ref $env:REF
+          }
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: 依存のインストール
+        run: |
+          python -m pip install --upgrade pip
+          # 再現性のため、実行時・GUI・配布の依存はすべてロックファイルから入れる
+          pip install -r requirements-build.lock pytest
+
+      - name: pytest
+        # Windows 実機でロジックが通ることをリリースの前提にする(実装計画 §8)
+        run: pytest -q
+        env:
+          PYTHONPATH: src
+
+      - name: バージョンが焼き込まれているか
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PYTHONPATH: src
+        run: |
+          $v = python -c "import qbank_mcq; print(qbank_mcq.__version__)"
+          if ($v -ne $env:VERSION) { throw "版番号が一致しません: $v != $env:VERSION" }
+          Write-Host "qbank-mcq $v"
+
+      - name: PyInstaller (onedir)
+        run: pyinstaller packaging/qbank-mcq.spec --noconfirm --clean
+
+      - name: exe のプロパティを確認
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NUMERIC_VERSION: ${{ steps.version.outputs.numeric_version }}
+        run: |
+          $exe = "dist/Qbank-MCQ/Qbank-MCQ.exe"
+          if (-not (Test-Path $exe)) { throw "$exe が作られていません" }
+          $info = (Get-Item $exe).VersionInfo
+          Write-Host "ProductVersion=$($info.ProductVersion) FileVersion=$($info.FileVersion)"
+          # ProductVersion の読まれ方は環境で揺れるので、どちらかに一致すればよしとする
+          if ($info.ProductVersion -ne $env:VERSION -and
+              $info.ProductVersion -ne $env:NUMERIC_VERSION) {
+            throw "exe の版番号がタグと違います: $($info.ProductVersion)"
+          }
+
+      - name: Inno Setup
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          NUMERIC_VERSION: ${{ steps.version.outputs.numeric_version }}
+        run: |
+          # windows-latest には Inno Setup 6 が入っている。無ければ入れる。
+          $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            choco install innosetup --no-progress -y
+            $iscc = Join-Path ${env:ProgramFiles(x86)} "Inno Setup 6\ISCC.exe"
+          }
+          & $iscc "/DAppVersion=$env:VERSION" "/DNumericVersion=$env:NUMERIC_VERSION" packaging\qbank-mcq.iss
+          if ($LASTEXITCODE -ne 0) { throw "ISCC が失敗しました" }
+
+      - name: インストーラのファイル名を確認
+        env:
+          INSTALLER: ${{ steps.version.outputs.installer }}
+        run: |
+          $path = "dist/installer/$env:INSTALLER"
+          if (-not (Test-Path $path)) {
+            Get-ChildItem dist/installer
+            throw "$path が作られていません"
+          }
+          "{0} ({1:N1} MB)" -f $path, ((Get-Item $path).Length / 1MB)
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Qbank-MCQ-${{ steps.version.outputs.version }}-setup
+          path: dist/installer/${{ steps.version.outputs.installer }}
+          if-no-files-found: error
+
+      - name: Release にインストーラを添付
+        # 手動実行(タグなし)のときは Release を作らず、artifact だけ残す
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          INSTALLER: ${{ steps.version.outputs.installer }}
+          PYTHONPATH: src
+        run: |
+          # 実装計画 §8「リリースノートにスキーマ変更の有無を必ず明記」。
+          # 対応スキーマ版を書き添え、上書き時に移行が走るかどうかを読めるようにする。
+          $schema = python -c "from qbank_mcq.core.migrate import TARGET_VERSION; print(TARGET_VERSION)"
+          $notes = @(
+            "Windows 用インストーラ: $env:INSTALLER",
+            "",
+            "- 対応スキーマ版: $schema",
+            "- インストール先: %LOCALAPPDATA%\Programs\Qbank-MCQ(管理者権限なしで入ります)",
+            "- データ: %APPDATA%\Qbank-MCQ(上書きでもアンインストールでも残ります)",
+            "",
+            "旧版が入っている PC にそのまま上書きインストールできます。DB のスキーマが古ければ",
+            "起動時に自動で移行し、移行前に %APPDATA%\Qbank-MCQ\backup へバックアップを取ります。"
+          )
+          $notes | Out-File -FilePath notes.md -Encoding utf8
+          gh release create "$env:TAG" "dist/installer/$env:INSTALLER" --title "Qbank-MCQ $env:VERSION" --notes-file notes.md --verify-tag

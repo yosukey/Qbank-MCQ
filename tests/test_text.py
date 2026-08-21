@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pytest
 
-from itembank.core.text import (
+from qbank_mcq.core.text import (
     escape_text,
     has_tag,
     html_to_runs,

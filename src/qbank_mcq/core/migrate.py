@@ -163,7 +163,7 @@ def open_database(
 ) -> tuple[Engine, MigrationResult]:
     """DB を開き、必要なら移行してからエンジンを返す。
 
-    ``db_file=None`` なら ``paths.db_path()``(``%APPDATA%\\ItemBank``)を使う。
+    ``db_file=None`` なら ``paths.db_path()``(``%APPDATA%\\Qbank-MCQ``)を使う。
     """
     from .db import make_engine
 

@@ -20,13 +20,13 @@ from pathlib import Path
 
 import pytest
 
-from itembank.__main__ import main
-from itembank.core.bank import create_question_from_printed
-from itembank.core.db import ItemStatRow
-from itembank.core.exam import apply_stats, create_exam, finalize_exam, set_exam_items
-from itembank.core.stats import BLANK, OTHER, PATTERNS, derive_item_stats
-from itembank.core.validate import validate_stats_import
-from itembank.io.csv_stats import (
+from qbank_mcq.__main__ import main
+from qbank_mcq.core.bank import create_question_from_printed
+from qbank_mcq.core.db import ItemStatRow
+from qbank_mcq.core.exam import apply_stats, create_exam, finalize_exam, set_exam_items
+from qbank_mcq.core.stats import BLANK, OTHER, PATTERNS, derive_item_stats
+from qbank_mcq.core.validate import validate_stats_import
+from qbank_mcq.io.csv_stats import (
     DIALECT_SSDB,
     KIND_NON_MCQ,
     parse_stats_csv,

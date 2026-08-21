@@ -9,9 +9,9 @@ import pytest
 from openpyxl import load_workbook
 from sqlalchemy.orm import Session
 
-from itembank.core.bank import create_question_from_printed
-from itembank.core.exam import apply_stats, create_exam, finalize_exam, set_exam_items
-from itembank.core.reporting import (
+from qbank_mcq.core.bank import create_question_from_printed
+from qbank_mcq.core.exam import apply_stats, create_exam, finalize_exam, set_exam_items
+from qbank_mcq.core.reporting import (
     ReportRow,
     choice_item_appearances,
     crosswalk_rows,
@@ -19,8 +19,8 @@ from itembank.core.reporting import (
     stratify_by_negative,
     stratify_by_type,
 )
-from itembank.core.stats import aggregate_item_performance
-from itembank.io.xlsx_report import write_crosswalk, write_stats_report
+from qbank_mcq.core.stats import aggregate_item_performance
+from qbank_mcq.io.xlsx_report import write_crosswalk, write_stats_report
 
 SET_A = ["エナメル質", "象牙質", "セメント質", "歯髄", "歯根膜"]
 SET_B = ["レッチウス条", "エブネル線", "新産線", "トームス突起", "シュレーゲル条"]
@@ -257,7 +257,7 @@ def test_most_confused_partner_is_identified(session: Session, imported_exam) ->
 
 
 def test_item_performance_is_sorted_by_appearances() -> None:
-    from itembank.core.stats import ItemAppearance
+    from qbank_mcq.core.stats import ItemAppearance
 
     appearances = [
         ItemAppearance("まれな語", 1, 1, False, 0.1, None),

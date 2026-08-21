@@ -11,8 +11,8 @@ from dataclasses import dataclass, field
 import pytest
 
 from designdata import DESIGN_Q1_VALUES, counts_from_row
-from itembank.core.stats import BLANK, OTHER, PATTERNS
-from itembank.core.validate import (
+from qbank_mcq.core.stats import BLANK, OTHER, PATTERNS
+from qbank_mcq.core.validate import (
     ExamItemView,
     ExamLimits,
     ParsedQuestionView,

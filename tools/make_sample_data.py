@@ -27,8 +27,8 @@ from docx.oxml.ns import qn
 sys.path.insert(0, str(Path(__file__).resolve().parent))  # 隣の update_golden.py
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 
-from itembank.core.stats import PATTERNS  # noqa: E402
-from itembank.core.typing_rules import LABELS  # noqa: E402
+from qbank_mcq.core.stats import PATTERNS  # noqa: E402
+from qbank_mcq.core.typing_rules import LABELS  # noqa: E402
 
 MINCHO = "ＭＳ 明朝"
 GOTHIC = "ＭＳ ゴシック"

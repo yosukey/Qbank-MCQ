@@ -16,7 +16,7 @@ from designdata import (
     DESIGN_Q1_N_CORRECT,
     DESIGN_Q1_P,
 )
-from itembank.core.stats import (
+from qbank_mcq.core.stats import (
     BLANK,
     FLAG_DEAD_DISTRACTOR,
     FLAG_DOMINANT_WRONG,
@@ -36,7 +36,7 @@ from itembank.core.stats import (
     is_disc_on_grid,
     pattern_columns,
 )
-from itembank.core.typing_rules import TYPE_A, TYPE_X2, TYPE_XX
+from qbank_mcq.core.typing_rules import TYPE_A, TYPE_X2, TYPE_XX
 
 # ---------------------------------------------------------------------------
 # パターン一覧(設計書 §10.2)

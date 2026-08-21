@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from itembank.core.choiceset import (
+from qbank_mcq.core.choiceset import (
     RELATION_CANDIDATE,
     RELATION_IDENTICAL,
     RELATION_NEAR,

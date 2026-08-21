@@ -11,9 +11,9 @@ import pytest
 from sqlalchemy.orm import Session
 
 from designdata import DESIGN_Q1_VALUES, counts_from_row
-from itembank.core.bank import create_question_from_printed, derive_question, revise_question
-from itembank.core.db import E_DRAFT, E_FINALIZED, E_IMPORTED, ItemPatternCount, ItemStatRow
-from itembank.core.exam import (
+from qbank_mcq.core.bank import create_question_from_printed, derive_question, revise_question
+from qbank_mcq.core.db import E_DRAFT, E_FINALIZED, E_IMPORTED, ItemPatternCount, ItemStatRow
+from qbank_mcq.core.exam import (
     ExamLockedError,
     apply_stats,
     booklet_sources,
@@ -25,7 +25,7 @@ from itembank.core.exam import (
     prior_discs,
     set_exam_items,
 )
-from itembank.core.stats import (
+from qbank_mcq.core.stats import (
     FLAG_DOMINANT_WRONG,
     FLAG_NO_STATS,
     FLAG_PERSISTENT_LOW_DISC,

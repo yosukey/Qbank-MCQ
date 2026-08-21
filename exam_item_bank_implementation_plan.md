@@ -19,10 +19,10 @@
 ## 1. 開発環境の準備(M0)
 
 ```
-itembank/
+Qbank-MCQ/
 ├─ pyproject.toml          # 依存とツール設定を1ファイルに集約
 ├─ requirements.lock        # pip-compile 等で固定(exeビルドの再現性のため)
-├─ src/itembank/
+├─ src/qbank_mcq/
 ├─ tests/
 ├─ testdata/                # 実データのゴールデンファイル
 └─ build/
@@ -32,7 +32,7 @@ itembank/
 - 仮想環境 + `requirements.lock` で依存を固定。**exeビルドの再現性はロックファイルに依存する**
 - リポジトリはGitHub(private)。Issueで作業単位を管理
 - リンタ/フォーマッタは ruff + black。型は pyright を緩めに
-- ログは `logging` で `%APPDATA%\ItemBank\logs\` に出力(exe配布後、ユーザー環境の不具合はログしか手がかりがない)
+- ログは `logging` で `%APPDATA%\Qbank-MCQ\logs\` に出力(exe配布後、ユーザー環境の不具合はログしか手がかりがない)
 
 **成果物**: 空のアプリが起動しログを吐く。`pytest` が0件で成功する。
 
@@ -112,7 +112,7 @@ docx → run結合 → 書式判定 → HTML断片 → docx出力 → 再取込 
    - `choice_set_signature(items)` — ソート連結ハッシュ
    - `set_similarity(a, b)` — 共通項目数
    - `check_emphasis_rule(stem_html)` — 否定語と `<strong>` の整合
-4. CLI骨格(`itembank db init` / `db migrate` / `db backup`)
+4. CLI骨格(`qbank db init` / `db migrate` / `db backup`)
 
 **受入条件**
 
@@ -136,7 +136,7 @@ docx → run結合 → 書式判定 → HTML断片 → docx出力 → 再取込 
    - docx由来のタイプ ⇔ CSV由来の正答個数
    - 強調規則チェック
 4. 選択肢セットの同定と近似リンク生成
-5. CLI(`itembank import-exam --docx X.docx --stats Y.csv --dry-run`)
+5. CLI(`qbank import-exam --docx X.docx --stats Y.csv --dry-run`)
 
 **受入条件**
 
@@ -225,7 +225,7 @@ docx → run結合 → 書式判定 → HTML断片 → docx出力 → 再取込 
 ## 5. モジュール構成
 
 ```
-src/itembank/
+src/qbank_mcq/
 ├─ __main__.py            # CLIエントリ
 ├─ app.py                 # GUIエントリ
 ├─ core/
@@ -287,7 +287,7 @@ git tag v0.3.0 && git push --tags
       → pytest
       → PyInstaller (onedir)
       → Inno Setup
-      → Release に ItemBank-0.3.0-setup.exe を添付
+      → Release に Qbank-MCQ-0.3.0-setup.exe を添付
 ```
 
 - バージョンは `0.x` の間は互換性を保証しない。実運用開始時に `1.0` とする
