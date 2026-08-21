@@ -29,7 +29,7 @@
 
 ```bash
 python3.11 -m venv .venv
-.venv/bin/pip install -e ".[dev]"
+.venv/bin/pip install -e ".[dev]"       # GUI も動かすなら ".[dev,gui]"
 .venv/bin/pytest -q
 ```
 
@@ -67,6 +67,12 @@ itembank import-stats --exam 2 --csv 集計.csv
 ユーザーデータは `%APPDATA%\ItemBank\`(Windows 以外は XDG 準拠)に置かれる。
 `ITEMBANK_DATA_DIR` で上書きできる。
 
+GUI はまだ起動確認用の窓だけ(画面 10 種は M4)。バージョン・DB の所在・件数が出る。
+
+```bash
+itembank-gui            # = python -m itembank.app
+```
+
 ## モジュール構成
 
 実装計画 §5 のとおり。**`core/` は `ui/` と `io/` に依存しない。**
@@ -74,6 +80,8 @@ itembank import-stats --exam 2 --csv 集計.csv
 ```
 src/itembank/
 ├─ __main__.py            CLI エントリ
+├─ app.py                 GUI エントリ(ログ初期化 → DB 移行 → 窓)
+├─ version.py             バージョン(正はリリースタグ — 下記「リリース」)
 ├─ core/
 │  ├─ paths.py            %APPDATA% 解決、ログ
 │  ├─ db.py               SQLAlchemy モデル(設計書 §8)
@@ -93,7 +101,18 @@ src/itembank/
 │  ├─ csv_stats.py        集計CSV
 │  ├─ csv_key.py          正答キー
 │  └─ xlsx_report.py      レポート・照合表
-└─ ui/                    (未実装 — M4)
+└─ ui/
+   ├─ about.py            窓に出す文言(Qt に依存しない ← テストから直接叩ける)
+   └─ main_window.py      起動確認用の窓(画面 10 種は M4)
+```
+
+配布まわりは `packaging/` にある。
+
+```
+packaging/
+├─ entry.py               PyInstaller の入口(app.py を package として import する皮)
+├─ itembank.spec          PyInstaller spec(onedir・未使用 Qt モジュールを exclude)
+└─ itembank.iss           Inno Setup(ユーザー単位インストール・データ保持)
 ```
 
 計画 §5 の一覧に対し `bank.py` `exam.py` `reporting.py` を足してある。改訂/派生の規則や
@@ -123,8 +142,8 @@ finalize の組み立ては GUI から独立して検証できる必要があり
 
 ```bash
 .venv/bin/pytest -q
-.venv/bin/ruff check src tests tools
-.venv/bin/black --check src tests tools
+.venv/bin/ruff check src tests tools packaging
+.venv/bin/black --check src tests tools packaging
 ```
 
 実装計画 §6 のテスト戦略に沿って:
@@ -207,14 +226,55 @@ python tools/update_golden.py --check testdata/exam_2025.docx
 v15 の書式(メタ行つき・`正答率` が 0〜1・`空白` 列)も引き続き読める。旧データの
 取り込みに備えて残してあり、`io/csv_stats.py` が方言を自動判定する。
 
+## リリース(Windows インストーラ)
+
+**バージョン番号の正はリリースタグ。** タグを打って push すると
+`.github/workflows/release.yml`(windows-latest)が動く。
+
+```bash
+git tag v0.3.0
+git push origin v0.3.0
+```
+
+```
+タグ v0.3.0
+  └─ tools/stamp_version.py が src/itembank/version.py の VERSION を 0.3.0 に書き換える
+       ├─ pytest(Windows 実機で)
+       ├─ PyInstaller (onedir)  → dist/ItemBank/ItemBank.exe  … プロパティも 0.3.0
+       ├─ Inno Setup            → dist/installer/ItemBank-0.3.0-setup.exe
+       └─ Release に添付
+```
+
+同じ 0.3.0 が次の 3 か所に出る。ワークフローはビルドの途中でこれを突き合わせ、
+食い違ったら失敗する。
+
+| どこ | 見え方 |
+|---|---|
+| アプリウィンドウ | タイトル `ItemBank 0.3.0` と本文の「バージョン 0.3.0」 |
+| インストーラ | ファイル名 `ItemBank-0.3.0-setup.exe` |
+| exe / インストーラのプロパティ | 製品バージョン `0.3.0`(ファイルバージョンは `0.3.0.0`) |
+
+そのため**バージョンを上げるためのコミットは要らない**。リポジトリの
+`version.py` にある値は開発中の暫定値で、`v0.3.0` 以外の書式のタグ(`0.3.0` や
+`release-0.3.0`)はビルド前に弾かれる。
+
+インストーラの性質(実装計画 §8 / 設計書 §15):
+
+- 入る場所は `%LOCALAPPDATA%\Programs\ItemBank`。**管理者権限を求めない**
+- **`%APPDATA%\ItemBank` には触らない**。上書きインストールでもアンインストールでも
+  DB・バックアップ・取込原本は残り、新しい版が起動時にスキーマ移行する
+- リリースノートに対応スキーマ版を必ず書く(ワークフローが自動で入れる)
+
+タグを打たずに試すときは Actions から `release` を手動実行する(バージョンを入力する。
+Release は作らず、成果物は artifact に残る)。
+
 ## 未着手
 
 | | 内容 | 備考 |
 |---|---|---|
-| **M4** | PySide6 の画面 10 種(設計書 §14) | ロジックはすべて CLI から呼べる形で揃っている |
+| **M4** | PySide6 の画面 10 種(設計書 §14) | いまの窓は起動確認用(実装計画 §2.2 スパイク②)。ロジックはすべて CLI から呼べる形で揃っている |
 | **M6 の一部** | matplotlib による可視化(設計書 §14-3) | 集計値は `core/reporting.py` が算出済み |
-| **M7** | PyInstaller spec / Inno Setup / リリース CI | Windows 実機がないと検証できないため未着手 |
-| **M1 スパイク②** | PyInstaller の実機確認・署名の要否判断 | 同上 |
+| **M7 の実機確認** | 別 PC でのインストール・起動・DB 移行、署名の要否判断 | ビルドは CI で通るが、Windows 実機での確認はまだ |
 
-`.github/workflows/test.yml` は lint とテストのみを回す。実装計画 §8 のリリース
-パイプライン(タグ push → exe + インストーラ)は M7 で足す。
+`.github/workflows/test.yml` は lint とテストのみを回す(ブランチへの push と PR)。
+リリースパイプラインは `release.yml` で、タグ `v*` の push でだけ動く。

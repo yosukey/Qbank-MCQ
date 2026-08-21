@@ -4,7 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "itembank"
-version = "0.1.0"
+# バージョンの正はリリースタグ。タグ push でワークフローが src/itembank/version.py を
+# 書き換えるので、ここから重ねて持たない(実装計画 §8)。
+dynamic = ["version"]
 description = "口腔組織学 試験問題バンクシステム"
 requires-python = ">=3.11,<3.12"
 dependencies = [
@@ -19,6 +21,12 @@ dev = ["pytest>=8.0", "ruff>=0.4", "black>=24.0"]
 
 [project.scripts]
 itembank = "itembank.__main__:main"
+
+[project.gui-scripts]
+itembank-gui = "itembank.app:main"
+
+[tool.setuptools.dynamic]
+version = { attr = "itembank.version.VERSION" }
 
 [tool.setuptools.packages.find]
 where = ["src"]

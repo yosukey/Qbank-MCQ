@@ -26,8 +26,8 @@ jobs:
 
       - name: lint
         run: |
-          ruff check src tests tools
-          black --check src tests tools
+          ruff check src tests tools packaging
+          black --check src tests tools packaging
 
       - name: pytest
         run: pytest -q

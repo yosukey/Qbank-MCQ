@@ -41,6 +41,17 @@ def write_csv(path: Path, rows: list[list[object]], *, meta: bool = True) -> Pat
     return path
 
 
+def write_text_crlf(path: Path, text: str) -> Path:
+    """CRLF をそのまま書く。
+
+    ``Path.write_text`` は改行を実行環境のものへ変換するため、Windows で走らせると
+    ``\\r\\n`` が ``\\r\\r\\n`` になってしまう。``newline=""`` を明示して防ぐ。
+    """
+    with path.open("w", encoding="utf-8-sig", newline="") as fh:
+        fh.write(text)
+    return path
+
+
 @pytest.fixture
 def design_csv(tmp_path: Path) -> Path:
     """設計書 §10.2 にそのまま載っている 1 行だけの CSV。"""
@@ -161,15 +172,12 @@ def design_csv_with_blank_line(tmp_path: Path) -> Path:
         tmp_path / "blank.csv",
         [[1, "ad", 0.8058, 112, 0.529, *DESIGN_Q1_VALUES]],
     )
-    path.write_text(
-        path.read_text(encoding="utf-8-sig").replace("問題,", "\r\n問題,"), encoding="utf-8-sig"
-    )
-    return path
+    return write_text_crlf(path, path.read_text(encoding="utf-8-sig").replace("問題,", "\r\n問題,"))
 
 
 def test_a_file_without_a_header_is_an_error(tmp_path: Path) -> None:
     path = tmp_path / "meta_only.csv"
-    path.write_text("#試験名,x\r\n", encoding="utf-8-sig")
+    write_text_crlf(path, "#試験名,x\r\n")
     with pytest.raises(StatsFormatError):
         parse_stats_csv(path)
 

@@ -7,7 +7,8 @@
 #   python -m venv .venv && .venv/bin/pip install -e ".[dev]"
 #   .venv/bin/pip freeze でバージョンを確認し、ここを書き換えて pytest を通す。
 #
-# GUI と配布(PySide6 / matplotlib / PyInstaller)は M4・M7 で追加する。
+# GUI と配布(PySide6 / PyInstaller)は `requirements-build.lock` にある。
+# Windows インストーラのビルドはそちらを使う。matplotlib は M6 で追加する。
 
 SQLAlchemy==2.0.52
 et_xmlfile==2.0.0
