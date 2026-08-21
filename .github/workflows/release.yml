@@ -72,10 +72,11 @@ jobs:
           pip install -r requirements-build.lock pytest
 
       - name: pytest
-        # Windows 実機でロジックが通ることをリリースの前提にする(実装計画 §8)
+        # Windows 実機でロジックと画面が通ることをリリースの前提にする(実装計画 §8)
         run: pytest -q
         env:
           PYTHONPATH: src
+          QT_QPA_PLATFORM: offscreen
 
       - name: バージョンが焼き込まれているか
         env:
@@ -104,6 +105,23 @@ jobs:
             throw "exe の版番号がタグと違います: $($info.ProductVersion)"
           }
 
+      - name: 凍結した exe が起動するか
+        # 画面を出さずに起動して、すぐ閉じる。**依存の収集漏れはここでしか出ない。**
+        # spec から Qt の実体や翻訳を落としているので、落としすぎていれば起動に失敗する。
+        env:
+          QT_QPA_PLATFORM: offscreen
+          QBANK_MCQ_DATA_DIR: ${{ runner.temp }}\qbank-mcq-smoke
+        run: |
+          $p = Start-Process -FilePath "dist\Qbank-MCQ\Qbank-MCQ.exe" -PassThru
+          Start-Sleep -Seconds 25
+          $log = "$env:QBANK_MCQ_DATA_DIR\logs\qbank_mcq.log"
+          if ($p.HasExited) {
+            if (Test-Path $log) { Get-Content $log -Tail 40 }
+            throw "起動直後に終了しました(終了コード $($p.ExitCode))"
+          }
+          Stop-Process -Id $p.Id -Force
+          if (Test-Path $log) { Get-Content $log -Tail 20 }
+
       - name: Inno Setup
         env:
           VERSION: ${{ steps.version.outputs.version }}
@@ -129,10 +147,20 @@ jobs:
           }
           "{0} ({1:N1} MB)" -f $path, ((Get-Item $path).Length / 1MB)
 
+      - name: version.json(アプリの更新確認が見に行く先 — 実装計画 M7-5)
+        # 「新しい版が出ているか」を伝えるだけの機械可読な版情報。スキーマ版も入れる
+        # ので、ヘルプ →「更新を確認」から DB の移行が要るかどうかまで読める。
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          PYTHONPATH: src
+        run: python tools/make_version_json.py dist/version.json --version $env:VERSION
+
       - uses: actions/upload-artifact@v4
         with:
           name: Qbank-MCQ-${{ steps.version.outputs.version }}-setup
-          path: dist/installer/${{ steps.version.outputs.installer }}
+          path: |
+            dist/installer/${{ steps.version.outputs.installer }}
+            dist/version.json
           if-no-files-found: error
 
       - name: Release にインストーラを添付
@@ -159,4 +187,6 @@ jobs:
             "起動時に自動で移行し、移行前に %APPDATA%\Qbank-MCQ\backup へバックアップを取ります。"
           )
           $notes | Out-File -FilePath notes.md -Encoding utf8
-          gh release create "$env:TAG" "dist/installer/$env:INSTALLER" --title "Qbank-MCQ $env:VERSION" --notes-file notes.md --verify-tag
+          # version.json も添える。**アプリの「更新を確認」はこれを名指しで取りに来る**
+          # (core/updates.py の LATEST_URL)ので、外すと更新確認が黙って壊れる。
+          gh release create "$env:TAG" "dist/installer/$env:INSTALLER" dist/version.json --title "Qbank-MCQ $env:VERSION" --notes-file notes.md --verify-tag
